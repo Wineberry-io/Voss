@@ -766,3 +766,394 @@ This is a docs/contract phase. "Tests" validate the artifact's internal consiste
 
 **Research date:** 2026-06-18
 **Valid until:** ~2026-12-18 (internal patterns stable; DORA metrics decades-stable; only observation window tuning and severity scale may need refinement based on team feedback)
+
+---
+
+## BOS-DATA-05 — Offline-Evaluation Requirements (added 2026-06-20)
+
+**Confidence:** HIGH for OPE theory, propensity-field shape, and contract structure (confirmed against OPE canonical literature and the existing Voss schema substrate). MEDIUM for gate-criteria defaults and CI-bound values (tunable team config — all flagged [ASSUMED]).
+
+> This section was added in a second discuss pass (plans 3-5). Plans BOS5-01/02 shipped DATA-03/04. Plans BOS5-03..05 ship DATA-05. All locked decisions (D-13..D-16) are in BOS5-CONTEXT.md §Offline-Evaluation Requirements.
+
+### Scope recap
+
+BOS5 (this section) = **the requirements contract** — two new JSON Schema records (`EvalDatasetSpec`, `PolicyEvalReport`) in `contracts/offline-eval.schema.json` + prose spec `docs/BOS5-OFFLINE-EVAL-SPEC.md`. BOS13 builds the export/replay machinery that produces and consumes those records. BOS15 wires the gate enforcement. BOS5 defines shapes and requirements only.
+
+---
+
+### RQ-1: OPE Estimator Family (D-14)
+
+**Confidence:** HIGH [ASSUMED — based on canonical OPE literature; cross-verified against multiple sources in training data; the characterization below is well-established and stable]
+
+Off-Policy Evaluation (OPE) estimates the value of a **target policy** π_new using data logged by a **behavior policy** π_b. The fundamental requirement enabling any OPE is that the behavior policy's action probabilities were logged at decision time — the propensity P(a | x; π_b). Without logged propensities, only direct-method estimators (which require a reward model) are feasible, and all importance-weighting estimators are blocked.
+
+#### Admissible Estimator Family (D-14 — name these, bind none)
+
+| Estimator | Abbreviation | Policy Class | What It Requires from Logged Data | What It Reports | Key Property |
+|-----------|-------------|-------------|-----------------------------------|-----------------|--------------|
+| Inverse Propensity Scoring | IPS | Contextual bandit (single-step) | Propensity p(a\|x) per logged decision; reward r | Point estimate, variance, ESS | Unbiased when propensities are correct; high variance with low overlap |
+| Self-Normalized IPS (Weighted IPS) | SNIPS | Contextual bandit (single-step) | Same as IPS | Point estimate, lower variance, ESS | Lower variance than IPS via normalization; slight bias; more stable at low ESS |
+| Doubly Robust | DR | Contextual bandit (single-step) | Propensity p(a\|x); reward model (direct-method baseline) | Point estimate, variance, ESS, model-bias term | Consistent if EITHER propensity OR reward model is correct; lower variance than IPS when reward model is good |
+| Direct Method | DM | Any (no propensity required) | A reward model (regression over features → reward) | Point estimate | Consistent only if reward model is correct; biased by model misspecification; use when propensities are unavailable |
+| Fitted Q-Evaluation | FQE | Sequential / RL (multi-step) | Trajectory data (s, a, r, s') tuples + propensity (for off-policy correction) | Q-value estimate, policy value | Handles temporal dependencies; requires more logged data; appropriate when decisions are sequential over an episode |
+
+**Required properties any admitted estimator MUST report (D-14 mandates these, not an estimator):**
+
+| Property | Why Required | How Expressed in PolicyEvalReport |
+|----------|-------------|----------------------------------|
+| Point estimate | The bottom-line value comparison (new policy vs baseline) | `ope_point_estimate` field |
+| Confidence interval / uncertainty bound | No policy is promoted without a CI that clears the D-16 threshold shape | `ci_lower`, `ci_upper`, `ci_level` fields |
+| Effective Sample Size (ESS) | Warns when high-variance propensity weights make the estimate unreliable | `effective_sample_size` field |
+| Bias disclosure | Flag when the estimate relies on an unverified reward model (DM or DR model component) | `bias_flags[]` array |
+
+**Policy-class guidance for BOS13 (informational — BOS5 does not bind):**
+
+- Heuristic / argmax delegation (current, deterministic) → IPS is degenerate (propensity=1.0 for every logged action, ESS = N). DM is the practical estimator until policies become stochastic. Log the propensity=1.0 anyway — the field must exist.
+- Contextual bandit (epsilon-greedy or softmax, BOS13/14) → IPS or SNIPS are the standard first choice; DR when a reward model is available.
+- Sequential RL over multi-step episodes (BOS16+) → FQE.
+
+**Anti-pattern to avoid:** Choosing an estimator in BOS5. D-14 explicitly rejects this. The requirements contract names the admissible family; BOS13 picks from it based on the actual logged data and policy class at build time.
+
+---
+
+### RQ-2: Propensity-Logging Field on the Decision Record (D-15)
+
+**Confidence:** HIGH for field shape and placement. Confirmed by reading `contracts/decision-ledger.schema.json` — the field does NOT exist there today. [VERIFIED: codebase read 2026-06-20]
+
+#### Current state of `contracts/decision-ledger.schema.json`
+
+Read directly: the schema has `decision_id`, `decision_type`, `created_at`, `as_of`, `feature_snapshot`, `entity_ref`, `autonomy_band`, `recommended_action`, `human_verdict`, `actual_action`, `rationale`, `payload`. **No propensity, no exploration, no action-space fields.** The schema uses `additionalProperties: false` at the top level, so adding a field requires an explicit schema amendment — this is the BOS4 follow-up plan D-15 mandates.
+
+#### Required new field shape (additive amendment to `contracts/decision-ledger.schema.json`)
+
+`[ASSUMED — exact field names are Claude's Discretion per CONTEXT.md; the structure below is the recommended shape]`
+
+```json
+"policy_context": {
+  "title": "Policy Context",
+  "description": "Action-propensity and exploration metadata logged at decision time (BOS5 D-15). Required for OPE: the behavior policy's propensity P(action|context) must be logged at the moment of decision so historical decisions remain evaluable when policies become stochastic. Currently deterministic (argmax -> propensity=1.0); field must exist now so historical decisions are not stranded un-evaluable.",
+  "type": "object",
+  "properties": {
+    "propensity": {
+      "title": "Propensity",
+      "description": "P(action | context; behavior_policy) at decision time. Range [0.0, 1.0]. For deterministic argmax policies: 1.0. For epsilon-greedy with epsilon=0.1 on the chosen action: (1 - epsilon) + epsilon/|A| if chosen action is greedy, else epsilon/|A|.",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "action_space": {
+      "title": "Action Space",
+      "description": "The candidate action set considered at decision time. Array of action identifiers (agent ids, band strings, depth levels, etc.) appropriate to the decision_type. For deterministic argmax with one option: [chosen_action_id]. Enables ESS computation and importance-weight clipping in OPE.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "exploration_flag": {
+      "title": "Exploration Flag",
+      "description": "Whether this decision was an exploration action (not the greedy/argmax choice). False for all current deterministic decisions. When true, propensity reflects the exploration probability.",
+      "type": "boolean"
+    },
+    "policy_version": {
+      "title": "Policy Version",
+      "description": "The behavior policy version that produced this decision. For deterministic heuristics: a named version string (e.g. 'heuristic-v1'). For learned policies (BOS13+): a versioned model/policy id. OPE requires knowing which policy produced each logged row.",
+      "type": "string"
+    }
+  },
+  "required": ["propensity", "action_space", "exploration_flag", "policy_version"],
+  "additionalProperties": false
+}
+```
+
+**Placement:** Top-level field on the decision record (alongside `rationale`, `recommended_action`), not inside `payload`, so it is available on every decision type without per-payload duplication.
+
+**Schema amendment note:** Because `decision-ledger.schema.json` has `additionalProperties: false`, this field cannot be added silently. The BOS4 follow-up plan must: (1) add `policy_context` to the `properties` block, (2) add it to `required`, and (3) add a migration note in `BOS4-DECISION-LEDGER.md`. This is an additive change (new required field) — a schema version bump is appropriate per the `$comment` versioning convention in `outcomes.schema.json`.
+
+**Deterministic policy population (current state):**
+
+```json
+"policy_context": {
+  "propensity": 1.0,
+  "action_space": ["claude-opus-4"],
+  "exploration_flag": false,
+  "policy_version": "heuristic-v1"
+}
+```
+
+**OPE implication of propensity=1.0:** When propensity=1.0 for every logged decision (deterministic policy), IPS weights are all 1.0 and IPS degenerates to the empirical mean — it is not informative for counterfactual estimation. This is expected and correct: IPS-family estimators become useful only when the behavior policy has positive support over multiple actions. The field must still be logged now because: (a) DM estimators need it for completeness; (b) once the policy becomes stochastic, historical rows without propensities cannot be included in OPE datasets.
+
+---
+
+### RQ-3: EvalDatasetSpec Contract (D-13)
+
+**Confidence:** HIGH (structural requirements follow directly from the no-leakage guarantee already established in BOS3/BOS4/BOS5 DATA-03/04; the fields below are the necessary and sufficient set for a valid OPE dataset given those upstream locks). `[ASSUMED — exact field names are Claude's Discretion]`
+
+`EvalDatasetSpec` is a **frozen, point-in-time-correct snapshot description** — a record that a BOS13 dataset exporter must produce alongside each eval dataset. It is a contract record, not a runtime event. It answers: "What is in this dataset, and is it valid for OPE?"
+
+#### Required fields
+
+```json
+// EvalDatasetSpec — shape (not a runtime event; a dataset-level manifest record)
+{
+  "spec_id":           string,          // stable unique id for this eval dataset spec
+  "v":                 integer (const 1),
+  "created_at":        date-time,       // when this spec was produced
+  "dataset_version":   string,          // version/tag for the frozen dataset (e.g. "eval-2026-Q3-v1")
+  "policy_version":    string,          // the behavior policy version whose decisions are in this dataset
+  "as_of_cutoff":      date-time,       // T_eval: only decisions with created_at <= T_eval included
+  "outcome_horizon":   string,          // "short" | "long" (or any named horizon from RewardRecord)
+  "outcome_as_of":     date-time,       // T_outcome: outcome labels with ingest_time <= T_outcome included
+  "no_leakage_check":  object,          // structural proof that outcome_as_of > as_of_cutoff (not a future filter)
+  "decision_count":    integer,         // number of decision rows in the dataset
+  "propensity_coverage_pct": number,    // % of rows with policy_context.propensity present (must be 100% for IPS-family)
+  "estimator_eligibility": array,       // which estimator families are eligible given the data ["ips","snips","dr","dm","fqe"]
+  "reward_objective_keys": array,       // the objective names present in RewardRecord.objective_vector for these rows
+  "weight_set_version": string,         // the WeightSetRecord version used to compute rewards in this dataset
+  "decision_types_included": array,     // which decision_type values are in this dataset (subset of the 6 types)
+  "horizon_note":      string           // optional: prose note on horizon selection rationale
+}
+```
+
+**The no-leakage invariant (required field `no_leakage_check`):**
+
+```json
+"no_leakage_check": {
+  "outcome_as_of_after_as_of_cutoff": true,   // outcome_as_of > as_of_cutoff (outcomes are posterior to decisions)
+  "all_outcomes_ingest_after_decision": true,  // all outcome ingest_times in dataset > corresponding decision created_at
+  "verified_by": "BOS13-exporter"             // which component verified this invariant
+}
+```
+
+This field makes the no-leakage guarantee explicit in the dataset manifest. BOS13's exporter writes it; the contract check (ACC-11) verifies it is present and `outcome_as_of_after_as_of_cutoff` is true in any example EvalDatasetSpec.
+
+**`estimator_eligibility` logic (informational for BOS13):**
+
+- `"ips"` eligible if `propensity_coverage_pct == 100` AND policy was stochastic (some propensity < 1.0)
+- `"snips"` — same as IPS conditions
+- `"dr"` — same as IPS conditions AND a reward model is available
+- `"dm"` — always eligible (requires reward model, not propensities)
+- `"fqe"` — eligible if decisions are sequential within episodes (multi-step)
+
+For the current deterministic heuristic phase, `estimator_eligibility` will typically be `["dm"]` (or `["ips","snips","dr","dm"]` with the caveat that IPS is degenerate at propensity=1.0). The field is still required; BOS13 populates it from the dataset statistics.
+
+---
+
+### RQ-4: PolicyEvalReport Contract (D-13/D-14)
+
+**Confidence:** HIGH for required fields (derived from D-14's mandatory properties + D-16's gate criteria shape). `[ASSUMED — exact field names are Claude's Discretion]`
+
+`PolicyEvalReport` is what BOS13 emits after running an offline evaluation. It is the machine-readable result record that BOS15 reads to enforce the D-16 promotion gate. One report per (policy candidate × eval dataset × estimator run).
+
+#### Required fields
+
+```json
+// PolicyEvalReport — shape (not a runtime event; an eval result record)
+{
+  "report_id":              string,        // stable unique id
+  "v":                      integer (const 1),
+  "created_at":             date-time,
+  "eval_dataset_spec_id":   string,        // foreign key → EvalDatasetSpec.spec_id
+  "candidate_policy_version": string,      // the new policy being evaluated (π_new)
+  "baseline_policy_version":  string,      // the behavior/baseline policy (π_b, same as dataset's policy_version)
+  "estimator":              string,        // which estimator was used: "ips" | "snips" | "dr" | "dm" | "fqe"
+  "ope_point_estimate":     number,        // estimated value of candidate policy under this estimator
+  "baseline_point_estimate": number,       // estimated value of baseline policy (for lift computation)
+  "ope_lift":               number,        // ope_point_estimate - baseline_point_estimate (positive = improvement)
+  "ci_level":               number,        // confidence level for the CI, e.g. 0.95 [ASSUMED default]
+  "ci_lower":               number,        // lower bound of (ope_lift) confidence interval
+  "ci_upper":               number,        // upper bound of (ope_lift) confidence interval
+  "effective_sample_size":  number,        // ESS — key quality indicator for IPS-family; low ESS = unreliable estimate
+  "bias_flags":             array,         // strings naming any known bias sources (e.g. "reward_model_not_validated", "low_ess", "deterministic_propensity")
+  "guardrail_deltas":       array,         // per-guardrail metric delta between candidate and baseline (shape below)
+  "gate_result":            object,        // did this report pass or fail the D-16 gate criteria? (shape below)
+  "reward_objective_keys":  array,         // the objective keys from the eval dataset (cross-check with EvalDatasetSpec)
+  "weight_set_version":     string,        // the WeightSetRecord version used for scalarized reward in this eval
+  "horizon":                string,        // "short" | "long" — the outcome horizon used in this eval
+  "notes":                  string         // optional: free-text rationale or caveats from the evaluator
+}
+```
+
+**`guardrail_deltas` item shape (one per GuardrailMetricSpec in the dataset):**
+
+```json
+{
+  "guardrail_id":     string,    // matches GuardrailMetricSpec.guardrail_id
+  "role":             string,    // "hard_gate" | "dashboard"
+  "candidate_value":  number,    // guardrail metric value for the candidate policy
+  "baseline_value":   number,    // guardrail metric value for the baseline
+  "delta":            number,    // candidate_value - baseline_value (negative = regression)
+  "regression":       boolean    // true if delta indicates the guardrail worsened (direction depends on metric)
+}
+```
+
+**`gate_result` shape (ties to D-16):**
+
+```json
+{
+  "passed":                      boolean,    // overall pass/fail
+  "lift_threshold_met":          boolean,    // ope_lift >= min_lift_threshold (D-16 shape; value is team config)
+  "ci_bound_met":                boolean,    // ci_lower >= min_ci_lower_threshold (D-16 shape; value is team config)
+  "all_hard_gates_non_regressed": boolean,   // no hard_gate guardrail has regression: true
+  "blocking_reasons":            array       // string list of reasons if passed=false
+}
+```
+
+---
+
+### RQ-5: Promotion-Gate Criteria Shape (D-16)
+
+**Confidence:** HIGH for structure. Threshold values are [ASSUMED] team config — not load-bearing for the contract shape.
+
+D-16 defines the **shape** of the gate criteria: what a policy must satisfy to be promoted. BOS15 wires the actual enforcement. The contract must express these as a versioned configuration record (not hardcoded in the schema) so threshold values are tunable without a schema change.
+
+#### PromotionGateCriteria record shape
+
+```json
+// PromotionGateCriteria — versioned team config record (not a runtime event)
+{
+  "criteria_id":          string,       // stable id for this criteria version
+  "v":                    integer (const 1),
+  "effective_from":       date-time,
+  "min_ope_lift":         number,       // minimum required ope_lift (D-16 threshold shape). [ASSUMED default: 0.0 — positive lift required]
+  "min_ci_lower":         number,       // minimum required ci_lower at ci_level. [ASSUMED default: 0.0 — CI lower bound must be non-negative]
+  "ci_level":             number,       // required CI confidence level. [ASSUMED default: 0.95]
+  "min_effective_sample_size": number,  // minimum ESS for the estimate to be trusted. [ASSUMED default: 30]
+  "hard_gate_non_regression_required": boolean, // must be true (all hard_gate guardrails must not worsen). Always true.
+  "required_estimators":  array,        // estimator(s) that must be run (e.g. ["dm"] for deterministic phase; ["ips","dr"] for bandit phase). [ASSUMED — teams configure per policy class]
+  "notes":                string
+}
+```
+
+**Three-part gate anatomy (D-16):**
+
+1. **Minimum OPE-lift threshold** (`min_ope_lift`): The candidate policy must improve on the baseline by at least this amount under the OPE estimate. Shape is "a non-negative number"; the value is team config. `[ASSUMED default: 0.0 — any positive lift qualifies, teams can raise this bar]`
+
+2. **CI/uncertainty bound** (`min_ci_lower` + `ci_level`): The lower bound of the confidence interval on the lift estimate must also be non-negative at the specified confidence level. This prevents promoting a policy where the CI spans zero (i.e., improvement is not statistically distinguishable from noise). `[ASSUMED default: ci_level=0.95, min_ci_lower=0.0]`
+
+3. **D-11 hard-gate guardrail non-regression**: Every guardrail metric classified as `hard_gate` in `GuardrailMetricSpec.role` must NOT worsen (must have `regression: false` in `guardrail_deltas`). This is a boolean hard requirement, not a threshold — it mirrors D-11's "hard gate = blocks promotion" classification. BOS5 defines this requirement; BOS15 implements the check.
+
+**Connection to D-11:** The D-11 hard-gate classification in `GuardrailMetricSpec` is the upstream of the D-16 gate. Every record in the outcomes schema with `role: "hard_gate"` automatically becomes a D-16 blocking check. The `PolicyEvalReport.gate_result.all_hard_gates_non_regressed` field is the aggregated result.
+
+**ESS floor rationale:** A minimum effective sample size is required because IPS-family estimates with very low ESS (e.g., ESS < 10) are practically meaningless — the variance is so high that even a "positive" point estimate is noise. The contract should require `effective_sample_size >= min_effective_sample_size` as a precondition for a valid IPS/SNIPS/DR estimate. `[ASSUMED default: 30 — a conservative but not overly strict floor; teams may lower for early evals]`
+
+---
+
+### RQ-6: Validation Architecture Extension (Nyquist — DATA-05 additions)
+
+The existing `tests/planning/test_bos_outcome_schema.py` + ACC-01..07 cover DATA-03/04. DATA-05 adds a new schema file (`contracts/offline-eval.schema.json`) and two new doc sections. The following extends the test map and ACC list.
+
+**New test file for DATA-05:** `tests/planning/test_bos_offline_eval_schema.py`
+
+#### Extended Phase Requirements → Test Map (BOS-DATA-05)
+
+| Req ID | Behavior | Test Type | Automated Command | File Exists? |
+|--------|----------|-----------|-------------------|-------------|
+| BOS-DATA-05 | `contracts/offline-eval.schema.json` exists and passes Draft 2020-12 meta-schema lint | unit | `.venv/bin/python -m pytest tests/planning/test_bos_offline_eval_schema.py::test_offline_eval_schema_is_valid -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `EvalDatasetSpec` and `PolicyEvalReport` are both present as named `$defs` in the offline-eval schema | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_record_types_present -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `EvalDatasetSpec` example round-trips: a minimal valid example validates against the schema | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_eval_dataset_spec_example_validates -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `PolicyEvalReport` example round-trips: a minimal valid example validates against the schema | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_policy_eval_report_example_validates -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `EvalDatasetSpec` carries `no_leakage_check` with `outcome_as_of_after_as_of_cutoff` field present | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_no_leakage_check_field_present -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `estimator_eligibility` is an array whose items are constrained to the D-14 admissible family enum (`ips`, `snips`, `dr`, `dm`, `fqe`) | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_estimator_family_enum_coverage -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `PolicyEvalReport.estimator` field is constrained to the same admissible estimator enum | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_report_estimator_enum -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `PolicyEvalReport` carries `ci_lower`, `ci_upper`, `ci_level`, `effective_sample_size`, `bias_flags`, `guardrail_deltas`, `gate_result` as required fields | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_policy_eval_report_required_fields -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `gate_result` sub-object has `passed`, `lift_threshold_met`, `ci_bound_met`, `all_hard_gates_non_regressed`, `blocking_reasons` | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_gate_result_shape -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `guardrail_deltas` item shape carries `guardrail_id`, `role` enum (`hard_gate`\|`dashboard`), `candidate_value`, `baseline_value`, `delta`, `regression` | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_guardrail_delta_shape -x` | ❌ Wave 0 |
+| BOS-DATA-05 | `contracts/decision-ledger.schema.json` (BOS4 follow-up) carries `policy_context` with `propensity`, `action_space`, `exploration_flag`, `policy_version` | unit | `pytest tests/planning/test_bos_offline_eval_schema.py::test_propensity_field_on_decision_record -x` | ❌ Wave 0 (BOS4 follow-up) |
+| BOS-DATA-05 | `docs/BOS5-OFFLINE-EVAL-SPEC.md` exists and contains the admissible estimator table, propensity-logging requirement, gate criteria shape, and a section on the no-leakage join | unit (file presence + section grep) | `pytest tests/planning/test_bos_offline_eval_schema.py::test_offline_eval_spec_doc_exists -x` | ❌ Wave 0 |
+
+#### Extended Acceptance Criteria (ACC-08..ACC-14)
+
+| ACC ID | Description |
+|--------|-------------|
+| ACC-08 | `contracts/offline-eval.schema.json` exists, passes Draft 2020-12 meta-schema lint |
+| ACC-09 | `EvalDatasetSpec` and `PolicyEvalReport` both present as named `$defs`; both validate example round-trips |
+| ACC-10 | `estimator_eligibility` and `PolicyEvalReport.estimator` both constrained to the D-14 admissible family enum (`ips`, `snips`, `dr`, `dm`, `fqe`) — no other values |
+| ACC-11 | `EvalDatasetSpec.no_leakage_check` present with `outcome_as_of_after_as_of_cutoff` boolean field; example dataset spec has this field set to `true` |
+| ACC-12 | `PolicyEvalReport` carries all D-14 mandatory properties: `ope_point_estimate`, `ci_lower`, `ci_upper`, `ci_level`, `effective_sample_size`, `bias_flags[]` |
+| ACC-13 | `PolicyEvalReport.gate_result` carries all three D-16 gate check fields: `lift_threshold_met`, `ci_bound_met`, `all_hard_gates_non_regressed` |
+| ACC-14 | `contracts/decision-ledger.schema.json` `policy_context` field present with `propensity` (number 0..1), `action_space` (array), `exploration_flag` (boolean), `policy_version` (string) — this is the BOS4 follow-up plan deliverable gated by ACC-14 |
+| ACC-15 | `docs/BOS5-OFFLINE-EVAL-SPEC.md` exists and contains: admissible estimator family table, propensity-logging requirement prose, gate criteria shape table, no-leakage join explanation for eval datasets, and a migration notes section |
+| ACC-16 | CI drift gate (`contracts/` drift check) extended to include `contracts/offline-eval.schema.json` |
+
+**Updated Wave 0 Gaps (DATA-05 additions):**
+- [ ] `tests/planning/test_bos_offline_eval_schema.py` — all DATA-05 schema validation tests above
+- [ ] `contracts/offline-eval.schema.json` — new sibling contract (EvalDatasetSpec + PolicyEvalReport + PromotionGateCriteria)
+- [ ] `docs/BOS5-OFFLINE-EVAL-SPEC.md` — normative prose: estimator family table, propensity requirement, gate criteria shape, no-leakage join, migration notes
+- [ ] `.planning/schemas/examples/offline_eval_examples.json` — example EvalDatasetSpec + PolicyEvalReport records (or inline fixtures in test file)
+- [ ] BOS4 follow-up plan: amend `contracts/decision-ledger.schema.json` to add `policy_context` field + migration note in `BOS4-DECISION-LEDGER.md`
+
+---
+
+### DATA-05 Common Pitfalls
+
+#### Pitfall 8: Logging Propensity for Deterministic Policies and Thinking It's Useless
+**What goes wrong:** Team skips adding the `policy_context` field because "we always pick argmax, so propensity=1.0 is meaningless." The field is omitted. When an epsilon-greedy bandit lands in BOS13, historical rows from the heuristic phase cannot be used in OPE datasets requiring propensity.
+**Why it happens:** The field seems trivially informative when propensity=1.0 everywhere.
+**How to avoid:** D-15 is explicit: the field MUST exist now. Propensity=1.0 is a valid value. The schema amendment to `decision-ledger.schema.json` adds `policy_context` as a required field — not optional — so runtime writers cannot skip it. The test ACC-14 checks the schema amendment, not just the value.
+**Warning signs:** `policy_context` absent from `contracts/decision-ledger.schema.json`, or present but optional.
+
+#### Pitfall 9: Confusing the Eval Dataset as-of Cutoff with the Outcome Horizon
+**What goes wrong:** `EvalDatasetSpec.as_of_cutoff` (the decision-time boundary) and `EvalDatasetSpec.outcome_as_of` (the outcome-time boundary) are conflated. The exporter uses the same timestamp for both, creating a dataset where outcomes ingested at the same moment as decisions are included — violating the no-leakage invariant.
+**Why it happens:** Both are timestamps; the distinction is "when were decisions made?" vs "how far into the future are outcomes observed?"
+**How to avoid:** The `no_leakage_check.outcome_as_of_after_as_of_cutoff` field makes this explicit. The contract requires `outcome_as_of > as_of_cutoff`. ACC-11 checks this in example records.
+**Warning signs:** `as_of_cutoff == outcome_as_of` in any EvalDatasetSpec example.
+
+#### Pitfall 10: Reporting a CI on the Point Estimate Rather Than on the Lift
+**What goes wrong:** `PolicyEvalReport` reports CI bounds on `ope_point_estimate` (the absolute value of the new policy) rather than on `ope_lift` (the delta between new and baseline). D-16's CI gate is on the lift, not the absolute value. A CI on the absolute value can pass D-16 erroneously when the baseline is high-variance.
+**Why it happens:** CI-on-estimate is simpler to compute; CI-on-lift requires computing the baseline estimate and propagating its uncertainty.
+**How to avoid:** The schema explicitly defines `ope_lift = ope_point_estimate - baseline_point_estimate` and `ci_lower`/`ci_upper` as bounds on the lift. The `gate_result.ci_bound_met` field checks `ci_lower >= min_ci_lower`, making it unambiguous that the CI is on lift.
+**Warning signs:** `baseline_point_estimate` absent from `PolicyEvalReport`, or `ope_lift` not defined as the difference.
+
+#### Pitfall 11: Treating ESS as Informational When It Should Block Promotion
+**What goes wrong:** `effective_sample_size` is logged in `PolicyEvalReport` but not checked in `gate_result`. A report with ESS=3 and a technically positive `ci_lower` passes the gate, even though the estimate is unreliable.
+**Why it happens:** ESS is treated as a diagnostic rather than a gate criterion.
+**How to avoid:** `PromotionGateCriteria.min_effective_sample_size` adds ESS as a gate condition. `PolicyEvalReport.gate_result` should check it. The contract includes `min_effective_sample_size` in `PromotionGateCriteria` even if BOS5 leaves the value as team config.
+
+#### Pitfall 12: Binding a Specific Estimator in the Contract (Violates D-14)
+**What goes wrong:** The `offline-eval.schema.json` defines only `"estimator": {"const": "doubly_robust"}` or similar — locking one estimator prematurely.
+**Why it happens:** It is tempting to pick a "best practice" estimator to reduce ambiguity.
+**How to avoid:** D-14 is explicit: the contract names the admissible family (`ips`, `snips`, `dr`, `dm`, `fqe`) as an enum. The `PolicyEvalReport.estimator` field is constrained to this enum — not a single const. BOS13 picks from the enum at implementation time. ACC-10 checks that the enum covers all five values, not a single const.
+
+---
+
+### DATA-05 Cross-Phase Dependency Map
+
+| Dependency | Direction | What BOS5 Produces | What Downstream Consumes |
+|------------|-----------|-------------------|--------------------------|
+| BOS4 decision-ledger schema | BOS5 → BOS4 follow-up | `policy_context` field requirement (D-15) | BOS4 follow-up plan amends `contracts/decision-ledger.schema.json`; BOS4 runtime writer populates it |
+| BOS13 Offline Evaluation Export and Replay | BOS5 → BOS13 | `contracts/offline-eval.schema.json` (EvalDatasetSpec + PolicyEvalReport) | BOS13 exporter produces EvalDatasetSpec; BOS13 replay harness produces PolicyEvalReport |
+| BOS15 policy-promotion gate | BOS5 → BOS15 | `PromotionGateCriteria` shape + D-16 gate check fields in PolicyEvalReport.gate_result | BOS15 reads PolicyEvalReport, enforces PromotionGateCriteria, blocks promotion on failure |
+| BOS5 DATA-03/04 (this phase, already shipped) | Sibling | `GuardrailMetricSpec.role` classification of hard_gate metrics | PolicyEvalReport.guardrail_deltas items mirror GuardrailMetricSpec.guardrail_id + role |
+| BOS-RL-02 (REQUIREMENTS) | Traceability | DATA-05 is dual-mapped BOS5 (contract) + BOS13 (build) | BOS-RL-02 is BOS15's gate-wiring requirement |
+
+---
+
+### DATA-05 Assumptions Log (additions to existing §Assumptions Log)
+
+| # | Claim | Section | Risk if Wrong |
+|---|-------|---------|---------------|
+| A11 | `ci_level` default of 0.95 for the CI on OPE lift | RQ-4, RQ-5 | Low — 0.95 is the community standard CI level; teams can configure; shape is what the contract locks |
+| A12 | `min_ope_lift` default of 0.0 (any positive lift) | RQ-5 PromotionGateCriteria | Medium — teams may want a minimum meaningful lift (e.g. 0.02); the shape is correct, the value is team config |
+| A13 | `min_effective_sample_size` default of 30 | RQ-5 PromotionGateCriteria | Low — conservative floor; overly strict if data is scarce; teams can lower; the field is what matters |
+| A14 | `policy_context` as the field name for the propensity/exploration group on the decision record | RQ-2 | Low — exact name is Claude's Discretion; shape is what matters |
+| A15 | `ope_lift` defined as `ope_point_estimate - baseline_point_estimate` (absolute delta, not relative %) | RQ-4 | Medium — relative lift (%) is a valid alternative; the contract must pick one and define it; absolute delta is simpler and avoids division-by-zero edge cases |
+| A16 | Admissible estimator enum is `["ips", "snips", "dr", "dm", "fqe"]` — exactly these 5 values | RQ-1 | Low — these are the canonical OPE estimator family; additional estimators (e.g. "model_selection") would be additive schema additions |
+
+---
+
+### DATA-05 Sources
+
+#### Primary (HIGH confidence)
+- `contracts/decision-ledger.schema.json` — verified absence of `policy_context` / propensity field. Read 2026-06-20. [VERIFIED: codebase read]
+- `contracts/outcomes.schema.json` (BOS5 DATA-03/04, already shipped) — confirmed `GuardrailMetricSpec.role` enum (`hard_gate` | `dashboard`) and `guardrail_id` that DATA-05 `guardrail_deltas` mirror. Read 2026-06-20. [VERIFIED: codebase read]
+- `.planning/phases/BOS5-outcome-labels-and-reward-model/BOS5-CONTEXT.md` — D-13..D-16 locked decisions. Read 2026-06-20. [VERIFIED: codebase read]
+- `.planning/phases/BOS4-decision-ledger-schema/BOS4-CONTEXT.md` — confirmed `additionalProperties: false` on decision record, confirming the BOS4 follow-up requirement. Read 2026-06-20. [VERIFIED: codebase read]
+
+#### Secondary (MEDIUM confidence)
+- OPE estimator family (IPS, SNIPS/weighted IPS, Doubly Robust, Direct Method, FQE) — canonical offline RL/bandit evaluation literature. `[ASSUMED — well-established; consistent characterization across Precup 2000 (IPS), Dudik et al. 2011 (DR), Le Paine et al. 2020 (FQE); cross-verified against multiple training-data sources]`
+- Effective Sample Size (ESS) as a required diagnostic for importance-weighting estimators — standard recommendation in Swaminathan & Joachims 2015 (SNIPS), Thomas & Brunskill 2016 (safe policy improvement). `[ASSUMED — well-established in OPE community; not re-verified via web search this session]`
+- CI-on-lift (not CI-on-absolute-value) as the correct gate condition for safe policy improvement — standard in safe RL / offline RL gating literature. `[ASSUMED — follows from Thomas et al. 2015 "High Confidence Policy Improvement"; consistent with D-16's framing]`
+
+---
+
+## RESEARCH COMPLETE
+
+DATA-05 additions: `contracts/offline-eval.schema.json` (EvalDatasetSpec + PolicyEvalReport + PromotionGateCriteria shapes), propensity field amendment to `contracts/decision-ledger.schema.json` (BOS4 follow-up), OPE admissible estimator family table (IPS/SNIPS/DR/DM/FQE), gate criteria shape (3-part: lift threshold + CI bound + hard-gate non-regression), and ACC-08..ACC-16 extending the existing Validation Architecture — all added to `BOS5-RESEARCH.md` as the `## BOS-DATA-05` section.

@@ -17,7 +17,7 @@ Hard bans:
 
 Structural reporting guarantees:
 
-- **Minimum aggregation floor:** a team metric is never reported for fewer than `N` contributors, k-anonymity-style. The value of `N` is an open question; the rule applies regardless of the final value.
+- **Minimum aggregation floor:** a team metric is never reported for fewer than `N` contributors, k-anonymity-style. `N` defaults to **3** — the smallest floor that blocks pair or individual re-identification and still works for small teams. A deployment may raise `N` but never lower it below 3.
 - **No cross-individual ranking:** BOS never reports an individual as better, worse, faster, slower, more productive, or less productive than another individual.
 - **Self-view permitted:** an individual may see their own data when the surface is scoped to that person.
 - **Stored != cross-reported:** data may be stored for audit, training-signal capture, or replay, but storage does not authorize individual-level team reporting.
@@ -52,6 +52,8 @@ Autonomy movement is intentionally asymmetric:
 
 Every recommendation surface must support human approval and override logging. Overrides are normal governance signals, not exceptions; they must remain auditable and available to downstream evaluation without authorizing individual ranking output.
 
+**Authorization boundary:** flipping a kill-switch or changing a surface's autonomy band is an access-controlled, audit-logged control action. BOS6 requires that boundary; it does not define the actor/role model for who may perform these actions. That model is owned by the BOS7 web control-plane.
+
 ## Privacy Tiers and Tenant Boundary
 
 BOS uses three data-sensitivity tiers:
@@ -77,6 +79,17 @@ Additional data handling:
 - The tenant is the team. The team is the isolation unit.
 - No cross-team reporting, cross-team sharing, or multi-tenant SaaS behavior is in scope for v0.2.
 
+## Retention and Deletion
+
+BOS uses tiered retention so privacy and training-signal integrity do not collide:
+
+| Data class | Retention | Deletion |
+|---|---|---|
+| Raw sensitive content (code, prompts, agent-session transcripts; `never_leaves_local`) | Bounded TTL, deployment-configurable. | Right-to-delete: an individual or team may delete this local content. |
+| Decision and outcome records (derived audit / training-signal corpus) | Retained beyond the raw-content TTL to preserve audit, replay, and training-signal integrity. | Not individually deletable; de-identifiable instead — actor attribution may be stripped while the decision/outcome signal is preserved. |
+
+The exact raw-content TTL window is a deployment-configuration value, not fixed by this spec. De-identification preserves `stored != cross-reported`: a record kept for training never authorizes individual-level reporting.
+
 ## Guardrail Dashboards
 
 BOS6 defines the governance dashboard set and trip conditions. BOS5 owns the underlying reward and guardrail metric definitions. BOS15 owns eval gates.
@@ -94,9 +107,9 @@ BOS6 owns these dashboard definitions and trip conditions only. It references BO
 
 ## Open Questions
 
-1. **Minimum aggregation value `N`:** the value of `N` for the minimum-aggregation floor is undecided. The structural rule holds regardless of the final value.
-2. **Data retention and deletion:** how long sessions, prompts, and decision records are kept, plus right-to-delete behavior, is undecided.
-3. **Kill-switch and autonomy-band RBAC:** who may flip the global or per-surface kill-switch and who may change a surface's autonomy band is undecided. This likely belongs to BOS7 web control-plane work or a later governance phase, but BOS6 does not decide it.
+1. **Raw-content retention TTL window:** the tiered-retention model is decided (see Retention and Deletion), but the exact TTL for raw sensitive content is a deployment-configuration value, not fixed by this spec.
+
+**Previously open, now resolved:** minimum aggregation `N` defaults to 3 (Trust Model and Anti-Surveillance Reporting); data retention is tiered with right-to-delete on raw content and de-identification of the decision/outcome corpus (Retention and Deletion); kill-switch and autonomy-band changes are access-controlled and audit-logged here, with the actor/role model owned by BOS7 (Autonomy Bands and Kill-Switch).
 
 ## Cross-Phase Boundaries
 

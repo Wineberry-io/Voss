@@ -86,9 +86,9 @@ jobs:
     # supports reading dependency specs directly via -P / requirements file
     # parsing; we feed it the pyproject.toml-resolved set.
     #
-    # `--strict` would fail on any vuln; we run non-strict on PRs (report-only,
-    # warning surfaced via ::warning::) and strict on scheduled runs so a fresh
-    # CVE post-merge alerts maintainers without blocking in-flight PRs.
+    # `--strict` would fail on any vuln; we run non-strict on PRs/pushes
+    # (report-only) and strict on scheduled, release, and manually-dispatched
+    # runs so a fresh CVE alerts maintainers without blocking in-flight PRs.
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
@@ -121,7 +121,9 @@ jobs:
               md = entry.get('metadata', {})
               name = md.get('name')
               version = md.get('version')
-              if name and version:
+              # The editable root project is part of pip's report but is not a
+              # third-party dependency and cannot be resolved from PyPI.
+              if name and version and name.casefold() != 'voss':
                   lines.append(f'{name}=={version}')
           open('/tmp/requirements-resolved.txt', 'w').write('\n'.join(lines) + '\n')
           print(f'resolved {len(lines)} deps')
@@ -132,7 +134,7 @@ jobs:
             echo "::warning::dep resolution produced no file; skipping pip-audit"
             exit 0
           fi
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "release" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "release" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             pip-audit --strict --progress-spinner off -r /tmp/requirements-resolved.txt
           else
             pip-audit --progress-spinner off -r /tmp/requirements-resolved.txt || echo "::warning::pip-audit reported advisories; see job log"

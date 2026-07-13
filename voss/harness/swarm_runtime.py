@@ -33,6 +33,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from .bos_decisions import (
+    append_decision,
+    build_as_of,
+    build_task_to_agent_record,
+)
 from .swarm_agents import is_native, resolve_agent_argv
 from .swarm_filebus import read_result_file, write_shared_context, write_task_file
 from .swarm_store import Role, SwarmStore, Task
@@ -163,6 +168,41 @@ async def run_cli_member(
     )
 
     store.mark_assigned(swarm_id, task.id)
+
+    # Inline emission at the assignment seam (D-R01/D-R02): freeze the
+    # task_to_agent decision against the exact assignment context + BOS3 event
+    # ledger tail. Best-effort — a ledger write error must never abort the swarm
+    # run. No outcome/result data is captured here (no-leakage, schema D-04).
+    try:
+        swarm = store.get(swarm_id)
+        roster = swarm.roster if swarm is not None else [role]
+        append_decision(
+            repo_root,
+            build_task_to_agent_record(
+                decision_id=f"dec-{swarm_id}-{task.id}",
+                task_id=task.id,
+                chosen_agent_id=role.agent,
+                candidate_agents=[role.agent],
+                feature_snapshot={
+                    "goal": task.goal,
+                    "roster": [r.name for r in roster],
+                    "available_models": [r.model for r in roster],
+                    "cwd": str(repo_root),
+                },
+                entity_ref={
+                    "task_id": task.id,
+                    "swarm_id": swarm_id,
+                    "agent_id": role.agent,
+                },
+                as_of=build_as_of(repo_root / ".voss" / "bos" / "events.jsonl"),
+                rationale=(
+                    f"swarm assignment: task {task.id} -> role {role.name} "
+                    f"(agent {role.agent})"
+                ),
+            ),
+        )
+    except (OSError, ValueError):
+        pass
 
     argv = resolve_agent_argv(role, cwd=mw.path, task_text=task.goal)
 

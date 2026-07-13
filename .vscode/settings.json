@@ -20,8 +20,11 @@
     "**/dist-newstyle/**": true
   },
   "files.watcherExclude": {
-    "**/dist-newstyle/**": true
+    "**/dist-newstyle/**": true,
+    "**/target/**": true
   },
+  "rust-analyzer.linkedProjects": ["./Cargo.toml"],
+  "rust-analyzer.files.excludeDirs": ["tests/eval/matrix", "target"],
   "search.exclude": {
     "**/dist-newstyle/**": true
   },

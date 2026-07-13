@@ -109,6 +109,52 @@ The contract suite (`tests/planning/test_bos_outcome_schema.py`) asserts:
 
 ---
 
+## DATA-05 Offline-Eval Slice (added 2026-06-20 — plans BOS5-03/04/05)
+
+> Same docs-first discipline: "tests" validate the offline-eval CONTRACT artifacts
+> (`contracts/offline-eval.schema.json` + `docs/BOS5-OFFLINE-EVAL-SPEC.md` + the additive
+> `policy_context` amendment to `contracts/decision-ledger.schema.json`), not runtime behavior.
+> See BOS5-RESEARCH.md §BOS-DATA-05 + extended §Validation Architecture (ACC-08..ACC-16).
+
+| Quick run command | `.venv/bin/python -m pytest tests/planning/test_bos_offline_eval_schema.py tests/planning/test_bos_decision_policy_context.py -x` |
+|----|----|
+
+### Per-Task Verification Map (DATA-05)
+
+| Task | Plan | Wave | Requirement | Test Type | Status |
+|------|------|------|-------------|-----------|--------|
+| author `contracts/offline-eval.schema.json` (EvalDatasetSpec + PolicyEvalReport + PromotionGateCriteria + estimator enum) | BOS5-03 | 1 | BOS-DATA-05 | schema-lint + variant/enum/gate-shape coverage | ⬜ pending |
+| author `docs/BOS5-OFFLINE-EVAL-SPEC.md` | BOS5-03 | 1 | BOS-DATA-05 | content + table assertions | ⬜ pending |
+| bundle offline-eval example records (+ no-leakage example) | BOS5-04 | 2 | BOS-DATA-05 | round-trip + no-leakage + FK check | ⬜ pending |
+| DATA-05 contract pytest suite (`test_bos_offline_eval_schema.py`) | BOS5-04 | 2 | BOS-DATA-05 | ACC-08..13,15,16 | ⬜ pending |
+| additive `policy_context` on `decision-ledger.schema.json` + presence test | BOS5-05 | 2 | BOS-DATA-05 (D-15, BOS4 follow-up) | additive-schema lint + ACC-14 presence | ⬜ pending |
+| deterministic `policy_context` example (propensity=1.0) | BOS5-05 | 2 | BOS-DATA-05 | example round-trip | ⬜ pending |
+
+### Acceptance Criteria (ACC-08..ACC-16)
+
+| ACC ID | Description |
+|--------|-------------|
+| ACC-08 | `contracts/offline-eval.schema.json` exists, passes Draft 2020-12 meta-schema lint |
+| ACC-09 | `EvalDatasetSpec` and `PolicyEvalReport` both present as named `$defs`; both validate example round-trips |
+| ACC-10 | `estimator_eligibility` and `PolicyEvalReport.estimator` constrained to the D-14 admissible family enum (`ips`, `snips`, `dr`, `dm`, `fqe`) — no other values, no single binding |
+| ACC-11 | `EvalDatasetSpec.no_leakage_check` present with `outcome_as_of_after_as_of_cutoff` boolean; example dataset spec sets it `true` |
+| ACC-12 | `PolicyEvalReport` carries all D-14 mandatory properties: `ope_point_estimate`, `ci_lower`, `ci_upper`, `ci_level`, `effective_sample_size`, `bias_flags[]` |
+| ACC-13 | `PolicyEvalReport.gate_result` carries all three D-16 gate checks: `lift_threshold_met`, `ci_bound_met`, `all_hard_gates_non_regressed` |
+| ACC-14 | `contracts/decision-ledger.schema.json` `policy_context` present + REQUIRED with `propensity` (0..1), `action_space` (array), `exploration_flag` (boolean), `policy_version` (string) — BOS4 follow-up deliverable (BOS5-05) |
+| ACC-15 | `docs/BOS5-OFFLINE-EVAL-SPEC.md` contains: admissible estimator family table, propensity-logging requirement, gate-criteria shape table, no-leakage join explanation, migration notes |
+| ACC-16 | CI drift gate extended to include `contracts/offline-eval.schema.json` |
+
+### Wave 0 Requirements (DATA-05)
+
+- [ ] `contracts/offline-eval.schema.json` (BOS5-03)
+- [ ] `docs/BOS5-OFFLINE-EVAL-SPEC.md` (BOS5-03)
+- [ ] `.planning/schemas/examples/offline-eval-*.json` (BOS5-04)
+- [ ] `tests/planning/test_bos_offline_eval_schema.py` (BOS5-04)
+- [ ] `policy_context` amendment + `tests/planning/test_bos_decision_policy_context.py` + `decision-policy-context.json` (BOS5-05)
+- [x] `jsonschema` 4.26.0 in `.venv` — confirmed
+
+---
+
 ## Validation Sign-Off
 
 - [ ] All tasks have automated verify or Wave 0 dependencies
