@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -233,6 +234,11 @@ def test_count_tokens_returns_positive_int():
     ["claude-sonnet-4-5", "gpt-4o-mini", "ollama/llama3.2:1b"],
 )
 async def test_live_complete_returns_text(model):
+    if model == "claude-sonnet-4-5" and not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not configured")
+    if model == "gpt-4o-mini" and not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY not configured")
+
     p = LiteLLMProvider()
     out = await p.complete(
         messages=[{"role": "user", "content": "respond with the word OK"}],
