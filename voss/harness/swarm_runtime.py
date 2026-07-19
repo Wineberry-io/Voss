@@ -45,7 +45,6 @@ from .swarm_watch import OwnershipWatcher, detect_violations, revert_paths
 from .swarm_worktree import (
     changed_files,
     create_member_worktree,
-    merge_member,
     remove_member_worktree,
 )
 
@@ -108,6 +107,10 @@ class MemberResult:
     exit_code: int
     violations: list[str] = field(default_factory=list)
     merged: bool = False
+    candidate_ready: bool = False
+    candidate_branch: str | None = None
+    candidate_worktree: str | None = None
+    candidate_head: str | None = None
     summary: str | None = None
 
 
@@ -143,8 +146,9 @@ async def run_cli_member(
          detect out-of-`owned_files` writes, revert them, and emit a
          `swarm.needs_operator` event. (A live OwnershipWatcher runs alongside as
          belt-and-suspenders, but the verdict here is the authority.)
-      5. Merge the (now in-scope) worktree, read the member's result summary, mark
-         the task done, and tear the worktree down.
+      5. Commit the (now in-scope) worktree as an immutable candidate. Preserve
+         its branch/worktree for explicit review and integration. A clean no-change
+         run has no candidate and may be marked done + cleaned up immediately.
 
     The member's result file is written into the MAIN repo's shared file-bus
     (`.voss/swarm/<id>/results/<role>.result.md`) — the host hands the CLI that
@@ -238,31 +242,55 @@ async def run_cli_member(
     result = read_result_file(repo_root, swarm_id, role.name)
     summary = result.summary if result is not None else None
 
-    # Commit the member's (now in-scope) work onto its branch so fan-in has
-    # something to merge — a black-box CLI leaves uncommitted working-tree edits,
-    # and merge_member merges the BRANCH. Skip the merge if nothing remains after
-    # reverts (a no-op merge would error on "nothing to commit").
-    merged = _commit_member_work(mw.path, role.name)
-    if merged:
-        merge_member(repo_root, mw)
-    store.mark_done(swarm_id, task.id, summary=summary)
-    remove_member_worktree(repo_root, mw)
+    # Freeze the member's in-scope work on its branch, but do not merge or destroy
+    # it. Integration is a separate review-gated operation. A clean worktree has
+    # no candidate to preserve and can complete normally.
+    candidate_head = _commit_member_work(mw.path, role.name)
+    if candidate_head is not None:
+        store.mark_candidate_ready(
+            swarm_id,
+            task.id,
+            branch=mw.branch,
+            worktree=str(mw.path),
+            head=candidate_head,
+            summary=summary,
+        )
+        _emit(
+            on_event,
+            {
+                "type": "swarm.candidate_ready",
+                "swarm_id": swarm_id,
+                "task_id": task.id,
+                "role": role.name,
+                "branch": mw.branch,
+                "worktree": str(mw.path),
+                "head": candidate_head,
+                "summary": summary,
+            },
+        )
+    else:
+        store.mark_done(swarm_id, task.id, summary=summary)
+        remove_member_worktree(repo_root, mw)
 
     return MemberResult(
         role=role.name,
         task_id=task.id,
         exit_code=exit_code,
         violations=violations,
-        merged=merged,
+        merged=False,
+        candidate_ready=candidate_head is not None,
+        candidate_branch=mw.branch if candidate_head is not None else None,
+        candidate_worktree=str(mw.path),
+        candidate_head=candidate_head,
         summary=summary,
     )
 
 
-def _commit_member_work(worktree: Path, role: str) -> bool:
+def _commit_member_work(worktree: Path, role: str) -> str | None:
     """Stage + commit the member's working-tree changes onto its branch.
 
-    Returns True if a commit was made, False if the worktree was clean (nothing
-    to fan in — e.g. all writes were out-of-scope and reverted). Uses local
+    Returns the immutable candidate commit id, or None if the worktree was clean
+    (e.g. all writes were out-of-scope and reverted). Uses local
     `-c user.*` so the commit never depends on global git identity in CI.
     """
     subprocess.run(
@@ -270,15 +298,17 @@ def _commit_member_work(worktree: Path, role: str) -> bool:
         capture_output=True,
         text=True,
         timeout=30,
+        check=True,
     )
     status = subprocess.run(
         ["git", "-C", str(worktree), "status", "--porcelain"],
         capture_output=True,
         text=True,
         timeout=30,
+        check=True,
     )
     if not status.stdout.strip():
-        return False
+        return None
     subprocess.run(
         [
             "git",
@@ -296,8 +326,16 @@ def _commit_member_work(worktree: Path, role: str) -> bool:
         capture_output=True,
         text=True,
         timeout=30,
+        check=True,
     )
-    return True
+    head = subprocess.run(
+        ["git", "-C", str(worktree), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    return head.stdout.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -352,14 +390,25 @@ async def run_cli_swarm(
             await asyncio.gather(*(_guarded(role, task) for role, task in pairs))
         )
 
-    _emit(
-        on_event,
-        {
-            "type": "swarm.complete",
-            "swarm_id": swarm_id,
-            "task_count": len(results),
-        },
-    )
+    candidates = [result for result in results if result.candidate_ready]
+    if candidates:
+        _emit(
+            on_event,
+            {
+                "type": "swarm.candidates_ready",
+                "swarm_id": swarm_id,
+                "candidate_count": len(candidates),
+            },
+        )
+    else:
+        _emit(
+            on_event,
+            {
+                "type": "swarm.complete",
+                "swarm_id": swarm_id,
+                "task_count": len(results),
+            },
+        )
     return results
 
 

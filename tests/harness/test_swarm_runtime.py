@@ -25,7 +25,7 @@ from voss.harness.swarm_runtime import (
     run_cli_swarm,
     subprocess_spawn,
 )
-from voss.harness.swarm_store import DONE, Role, SwarmStore
+from voss.harness.swarm_store import CANDIDATE_READY, DONE, Role, SwarmStore
 
 
 def _git(args: list[str], cwd: Path) -> None:
@@ -96,7 +96,7 @@ def _spawn_with_result(
     return spawn_fn
 
 
-def test_happy_path_owned_edit_merges_and_completes(repo: Path) -> None:
+def test_happy_path_owned_edit_preserves_candidate_for_review(repo: Path) -> None:
     store = SwarmStore(cwd=repo)
     swarm = store.create("ship it", cwd=str(repo), roster=[Role(name="builder-1", agent="codex")])
     role = swarm.roster[0]
@@ -112,12 +112,28 @@ def test_happy_path_owned_edit_merges_and_completes(repo: Path) -> None:
 
     assert isinstance(result, MemberResult)
     assert result.violations == []
-    assert result.merged is True
+    assert result.merged is False
+    assert result.candidate_ready is True
+    assert result.candidate_branch == f"swarm/{swarm.id}/builder-1"
+    assert result.candidate_head
+    assert result.candidate_worktree
+    assert Path(result.candidate_worktree).is_dir()
     assert result.summary == "edited owned.py"
-    # Task is DONE in the store.
-    assert store.get(swarm.id).task(task.id).state == DONE
-    # The owned-file change is present on the MAIN branch after fan-in merge.
-    assert (repo / "owned.py").read_text() == "# changed by builder\n"
+    # The worker finished, but integration is still gated on candidate review.
+    stored = store.get(swarm.id).task(task.id)
+    assert stored.state == CANDIDATE_READY
+    assert stored.candidate_branch == result.candidate_branch
+    assert stored.candidate_head == result.candidate_head
+    # The main checkout remains untouched until explicit integration.
+    assert (repo / "owned.py").read_text() == "# original\n"
+    candidate = subprocess.run(
+        ["git", "show", f"{result.candidate_head}:owned.py"],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert candidate.stdout == "# changed by builder\n"
 
 
 def test_ownership_violation_reverted_and_escalated(repo: Path) -> None:
@@ -149,10 +165,24 @@ def test_ownership_violation_reverted_and_escalated(repo: Path) -> None:
     assert needs_op and "other.py" in needs_op[0]["paths"]
     assert needs_op[0]["task_id"] == task.id
 
-    # After merge: the out-of-scope change was reverted (other.py unchanged on
-    # main), while the owned edit landed.
+    # Main remains untouched; the preserved candidate contains only the owned edit.
     assert (repo / "other.py").read_text() == "# untouched\n"
-    assert (repo / "owned.py").read_text() == "# legit\n"
+    assert (repo / "owned.py").read_text() == "# original\n"
+    assert result.candidate_head
+    assert subprocess.run(
+        ["git", "show", f"{result.candidate_head}:owned.py"],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout == "# legit\n"
+    assert subprocess.run(
+        ["git", "show", f"{result.candidate_head}:other.py"],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout == "# untouched\n"
 
 
 def test_native_roles_skipped_still_completes(repo: Path) -> None:
@@ -212,13 +242,36 @@ def test_run_cli_swarm_runs_cli_members(repo: Path) -> None:
 
     assert len(results) == 2
     assert {r.role for r in results} == {"builder-1", "builder-2"}
-    assert all(r.violations == [] and r.merged for r in results)
-    assert {store.get(swarm.id).task(t).state for t in (ta.id, tb.id)} == {DONE}
-    # Both members' changes are on main.
-    assert (repo / "owned.py").read_text() == "# by builder-1\n"
-    assert (repo / "other.py").read_text() == "# by builder-2\n"
-    complete = [e for e in events if e["type"] == "swarm.complete"]
-    assert complete and complete[0]["task_count"] == 2
+    assert all(r.violations == [] and not r.merged and r.candidate_ready for r in results)
+    assert {store.get(swarm.id).task(t).state for t in (ta.id, tb.id)} == {
+        CANDIDATE_READY
+    }
+    # Neither candidate is merged into main automatically.
+    assert (repo / "owned.py").read_text() == "# original\n"
+    assert (repo / "other.py").read_text() == "# untouched\n"
+    ready = [e for e in events if e["type"] == "swarm.candidates_ready"]
+    assert ready and ready[0]["candidate_count"] == 2
+    assert not [e for e in events if e["type"] == "swarm.complete"]
+
+
+def test_no_change_member_completes_and_cleans_up(repo: Path) -> None:
+    store = SwarmStore(cwd=repo)
+    swarm = store.create("inspect", cwd=str(repo), roster=[Role(name="reviewer", agent="codex")])
+    role = swarm.roster[0]
+    task = store.add_task(swarm.id, "inspect only", owned_files=["owned.py"])
+
+    def spawn(argv: list[str], cwd: Path) -> _FakeHandle:
+        _write_result(repo, swarm.id, role.name, "no changes")
+        return _FakeHandle(0)
+
+    result = asyncio.run(
+        run_cli_member(store, repo, swarm.id, role, task, spawn_fn=spawn)
+    )
+
+    assert result.candidate_ready is False
+    assert result.candidate_head is None
+    assert store.get(swarm.id).task(task.id).state == DONE
+    assert not Path(result.candidate_worktree or "missing").exists()
 
 
 def test_subprocess_spawn_real_process(tmp_path: Path) -> None:

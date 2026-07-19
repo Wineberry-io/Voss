@@ -31,8 +31,9 @@ from .swarm.events import SwarmEventLog
 # Task lifecycle states (VSWARM-11 replay timeline).
 OPEN = "open"
 ASSIGNED = "assigned"
+CANDIDATE_READY = "candidate_ready"
 DONE = "done"
-_ACTIVE_STATES = {OPEN, ASSIGNED}
+_ACTIVE_STATES = {OPEN, ASSIGNED, CANDIDATE_READY}
 
 # Write tools the ownership policy must cover. fs_edit_many is NOT in
 # permissions.WRITE, so its rule is matched by tool-name key directly — list all
@@ -84,6 +85,9 @@ class Task(_Base):
     owned_files: list[str] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
     state: str = OPEN
+    candidate_branch: str | None = None
+    candidate_worktree: str | None = None
+    candidate_head: str | None = None
 
 
 class Swarm(_Base):
@@ -312,6 +316,34 @@ class SwarmStore:
             payload={"task_id": task_id, "summary": summary},
         )
 
+    def mark_candidate_ready(
+        self,
+        swarm_id: str,
+        task_id: str,
+        *,
+        branch: str,
+        worktree: str,
+        head: str,
+        summary: str | None = None,
+    ) -> None:
+        task = self._require_task(swarm_id, task_id)
+        task.state = CANDIDATE_READY
+        task.candidate_branch = branch
+        task.candidate_worktree = worktree
+        task.candidate_head = head
+        self._emit(
+            "swarm.candidate_ready",
+            swarm_id,
+            actor="builder",
+            payload={
+                "task_id": task_id,
+                "branch": branch,
+                "worktree": worktree,
+                "head": head,
+                "summary": summary,
+            },
+        )
+
     def _require_task(self, swarm_id: str, task_id: str) -> Task:
         task = self._swarms[swarm_id].task(task_id)
         if task is None:
@@ -411,6 +443,13 @@ class SwarmStore:
                 t = swarm.task(payload["task_id"])
                 if t is not None:
                     t.state = ASSIGNED
+            elif etype == "swarm.candidate_ready":
+                t = swarm.task(payload["task_id"])
+                if t is not None:
+                    t.state = CANDIDATE_READY
+                    t.candidate_branch = payload.get("branch")
+                    t.candidate_worktree = payload.get("worktree")
+                    t.candidate_head = payload.get("head")
             elif etype == "swarm.worker_done":
                 t = swarm.task(payload["task_id"])
                 if t is not None:
@@ -431,6 +470,8 @@ class SwarmStore:
                 timeline.setdefault(tid, []).append(OPEN)
             elif etype == "swarm.assign":
                 timeline.setdefault(tid, []).append(ASSIGNED)
+            elif etype == "swarm.candidate_ready":
+                timeline.setdefault(tid, []).append(CANDIDATE_READY)
             elif etype == "swarm.worker_done":
                 timeline.setdefault(tid, []).append(DONE)
         return timeline

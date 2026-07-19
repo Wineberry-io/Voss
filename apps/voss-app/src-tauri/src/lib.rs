@@ -378,9 +378,55 @@ async fn spawn_managed_agent(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_env_with_agent_id, clipboard_image_extension, env_for_embedded_cli,
-        is_interactive_voss_command,
+        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
+        env_for_embedded_cli, is_interactive_voss_command,
     };
+    use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
+
+    fn workspace_index(project_path: Option<String>) -> WorkspacesIndex {
+        WorkspacesIndex {
+            version: CURRENT_WORKSPACES_VERSION,
+            active_workspace_id: Some("workspace-1".into()),
+            workspaces: vec![WorkspaceEntry {
+                id: "workspace-1".into(),
+                name: "Workspace".into(),
+                project_path,
+                accent_color: "#ff5b1f".into(),
+                order: 0,
+                active_layout_preset: None,
+                pinned_profile: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn sidecar_cwd_must_equal_a_registered_project_root() {
+        let root = std::env::temp_dir().join(format!(
+            "voss-sidecar-auth-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let project = root.join("project");
+        let child = project.join("child");
+        let other = root.join("other");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+
+        let index = workspace_index(Some(project.to_string_lossy().into_owned()));
+        assert_eq!(authorize_sidecar_cwd(project.to_str().unwrap(), &index).unwrap(), project);
+        assert!(authorize_sidecar_cwd(child.to_str().unwrap(), &index).is_err());
+        assert!(authorize_sidecar_cwd(other.to_str().unwrap(), &index).is_err());
+        assert!(authorize_sidecar_cwd(
+            project.to_str().unwrap(),
+            &workspace_index(None),
+        )
+        .is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     /// VBUS-03 camelCase IPC round-trip guard (V14 AgentEntry lesson): a
     /// serde rename mismatch on `vossAgentId` would arrive here as `None`

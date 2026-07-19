@@ -8,6 +8,8 @@ from voss.harness.server.events import (
     AgentEventAdapter,
     EventEnvelope,
     SwarmAssign,
+    SwarmCandidateReady,
+    SwarmCandidatesReady,
     SwarmComplete,
     SwarmGate,
     SwarmNeedsOperator,
@@ -25,6 +27,11 @@ def test_swarm_event_union_roundtrip() -> None:
             swarm_id="sw1", task_id="t1", session_id="s1",
             owned_files=["src/a.py"], role="builder",
         ),
+        SwarmCandidateReady(
+            swarm_id="sw1", task_id="t1", role="builder-1",
+            branch="swarm/sw1/builder-1", worktree="/tmp/wt", head="deadbeef",
+        ),
+        SwarmCandidatesReady(swarm_id="sw1", candidate_count=1),
         SwarmWorkerDone(swarm_id="sw1", task_id="t1", session_id="s1", summary="ok"),
         SwarmGate(swarm_id="sw1", task_id="t1", gate_type="reviewer_reject", detail="no"),
         SwarmNeedsOperator(
@@ -47,8 +54,8 @@ def test_swarm_events_in_envelope_schema() -> None:
         if "const" in const:
             literals.add(const["const"])
     for t in (
-        "swarm.assign", "swarm.worker_done", "swarm.gate",
-        "swarm.needs_operator", "swarm.complete",
+        "swarm.assign", "swarm.candidate_ready", "swarm.candidates_ready",
+        "swarm.worker_done", "swarm.gate", "swarm.needs_operator", "swarm.complete",
     ):
         assert t in literals, f"{t} missing from EventEnvelope schema"
 
