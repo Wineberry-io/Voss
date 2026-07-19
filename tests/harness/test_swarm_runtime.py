@@ -11,6 +11,7 @@ an exit code. Correctness of the ownership reconciliation is asserted on the MAI
 branch state AFTER the run, which is what the deterministic post-exit check (not a
 racing watcher) guarantees.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,9 @@ from voss.harness.swarm_store import CANDIDATE_READY, DONE, Role, SwarmStore
 
 
 def _git(args: list[str], cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    )
 
 
 @pytest.fixture()
@@ -62,13 +65,7 @@ class _FakeHandle:
 
 
 def _result_md(agent: str, summary: str) -> str:
-    return (
-        "---\n"
-        f"agent: {agent}\n"
-        "status: complete\n"
-        "---\n\n"
-        f"{summary}\n"
-    )
+    return f"---\nagent: {agent}\nstatus: complete\n---\n\n{summary}\n"
 
 
 def _write_result(repo: Path, swarm_id: str, role: str, summary: str) -> None:
@@ -98,12 +95,18 @@ def _spawn_with_result(
 
 def test_happy_path_owned_edit_preserves_candidate_for_review(repo: Path) -> None:
     store = SwarmStore(cwd=repo)
-    swarm = store.create("ship it", cwd=str(repo), roster=[Role(name="builder-1", agent="codex")])
+    swarm = store.create(
+        "ship it", cwd=str(repo), roster=[Role(name="builder-1", agent="codex")]
+    )
     role = swarm.roster[0]
     task = store.add_task(swarm.id, "edit owned", owned_files=["owned.py"])
 
     spawn = _spawn_with_result(
-        repo, {"owned.py": "# changed by builder\n"}, swarm.id, "builder-1", "edited owned.py"
+        repo,
+        {"owned.py": "# changed by builder\n"},
+        swarm.id,
+        "builder-1",
+        "edited owned.py",
     )
 
     result = asyncio.run(
@@ -138,7 +141,9 @@ def test_happy_path_owned_edit_preserves_candidate_for_review(repo: Path) -> Non
 
 def test_ownership_violation_reverted_and_escalated(repo: Path) -> None:
     store = SwarmStore(cwd=repo)
-    swarm = store.create("ship it", cwd=str(repo), roster=[Role(name="builder-1", agent="codex")])
+    swarm = store.create(
+        "ship it", cwd=str(repo), roster=[Role(name="builder-1", agent="codex")]
+    )
     role = swarm.roster[0]
     task = store.add_task(swarm.id, "edit owned", owned_files=["owned.py"])
 
@@ -169,20 +174,26 @@ def test_ownership_violation_reverted_and_escalated(repo: Path) -> None:
     assert (repo / "other.py").read_text() == "# untouched\n"
     assert (repo / "owned.py").read_text() == "# original\n"
     assert result.candidate_head
-    assert subprocess.run(
-        ["git", "show", f"{result.candidate_head}:owned.py"],
-        cwd=str(repo),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout == "# legit\n"
-    assert subprocess.run(
-        ["git", "show", f"{result.candidate_head}:other.py"],
-        cwd=str(repo),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout == "# untouched\n"
+    assert (
+        subprocess.run(
+            ["git", "show", f"{result.candidate_head}:owned.py"],
+            cwd=str(repo),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        == "# legit\n"
+    )
+    assert (
+        subprocess.run(
+            ["git", "show", f"{result.candidate_head}:other.py"],
+            cwd=str(repo),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        == "# untouched\n"
+    )
 
 
 def test_native_roles_skipped_still_completes(repo: Path) -> None:
@@ -242,7 +253,9 @@ def test_run_cli_swarm_runs_cli_members(repo: Path) -> None:
 
     assert len(results) == 2
     assert {r.role for r in results} == {"builder-1", "builder-2"}
-    assert all(r.violations == [] and not r.merged and r.candidate_ready for r in results)
+    assert all(
+        r.violations == [] and not r.merged and r.candidate_ready for r in results
+    )
     assert {store.get(swarm.id).task(t).state for t in (ta.id, tb.id)} == {
         CANDIDATE_READY
     }
@@ -256,7 +269,9 @@ def test_run_cli_swarm_runs_cli_members(repo: Path) -> None:
 
 def test_no_change_member_completes_and_cleans_up(repo: Path) -> None:
     store = SwarmStore(cwd=repo)
-    swarm = store.create("inspect", cwd=str(repo), roster=[Role(name="reviewer", agent="codex")])
+    swarm = store.create(
+        "inspect", cwd=str(repo), roster=[Role(name="reviewer", agent="codex")]
+    )
     role = swarm.roster[0]
     task = store.add_task(swarm.id, "inspect only", owned_files=["owned.py"])
 

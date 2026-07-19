@@ -1,5 +1,6 @@
 """Unit tests for SwarmStore, the append-only event log, overlap validation,
 the ownership-policy builder, scoped recall, and the session index (V25-01)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -76,7 +77,9 @@ def test_audit_replay_full_timeline(tmp_path: Path) -> None:
     assert store.replay(swarm.id).task(t.id).state == DONE
 
 
-def test_candidate_ready_replays_with_immutable_candidate_identity(tmp_path: Path) -> None:
+def test_candidate_ready_replays_with_immutable_candidate_identity(
+    tmp_path: Path,
+) -> None:
     store = SwarmStore(cwd=tmp_path)
     swarm = store.create(goal="g", cwd=str(tmp_path))
     task = store.add_task(swarm.id, goal="A", owned_files=["src/a.py"])
@@ -134,7 +137,10 @@ def test_ownership_policy_denies_non_owned(tmp_path: Path) -> None:
         )
     # `./`-prefixed owned path normalizes to the same allow (Pitfall 1).
     policy2 = build_ownership_policy(["./src/a.py"])
-    assert match_permission_rules(policy2.rules, "fs_edit", {"path": "src/a.py"}) == "allow"
+    assert (
+        match_permission_rules(policy2.rules, "fs_edit", {"path": "src/a.py"})
+        == "allow"
+    )
 
 
 def test_recall_scoped_to_owned_files(tmp_path: Path) -> None:

@@ -16,6 +16,7 @@ imports:
 `SwarmStore` is app-scoped (stored on `app.state`, NOT a module global): module
 globals leak across TestClient instances in pytest (research Anti-Pattern).
 """
+
 from __future__ import annotations
 
 import uuid
@@ -173,7 +174,9 @@ def build_ownership_policy(owned_files: list[str]) -> PermissionsConfig:
 # Scoped recall (VSWARM-07) — post-filter wrapper, not a recall signature change
 # ---------------------------------------------------------------------------
 class _Recallable(Protocol):
-    def recall(self, query: str, *, top_k: int = ..., source: str | None = ...) -> list[Any]: ...
+    def recall(
+        self, query: str, *, top_k: int = ..., source: str | None = ...
+    ) -> list[Any]: ...
 
 
 def _locator_path(locator: str) -> str:
@@ -249,7 +252,9 @@ class SwarmStore:
         # stored/replayed swarm matches what was spawned; otherwise the default
         # coordinator + N builders + reviewer.
         roster = roster if roster is not None else default_roster(builders=builders)
-        swarm = Swarm(id=sid, goal=goal, cwd=cwd or str(self.cwd), roster=roster, tasks=[])
+        swarm = Swarm(
+            id=sid, goal=goal, cwd=cwd or str(self.cwd), roster=roster, tasks=[]
+        )
         self._emit(
             "swarm.create",
             sid,
@@ -306,7 +311,9 @@ class SwarmStore:
             payload={"task_id": task_id, "session_id": session_id},
         )
 
-    def mark_done(self, swarm_id: str, task_id: str, summary: str | None = None) -> None:
+    def mark_done(
+        self, swarm_id: str, task_id: str, summary: str | None = None
+    ) -> None:
         task = self._require_task(swarm_id, task_id)
         task.state = DONE
         self._emit(

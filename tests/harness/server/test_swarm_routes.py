@@ -3,6 +3,7 @@
 Mirrors tests/harness/test_server_app.py — TestClient with _resolve_provider +
 run_turn monkeypatched; app.state.swarm_store redirected to a tmp event-log dir.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +42,9 @@ async def _fake_run_turn(text, *, renderer, **kw):
 
 
 def _build_app(monkeypatch, tmp_path):
-    monkeypatch.setattr(appmod, "_resolve_provider", lambda pref: (_FakeRes(), object()))
+    monkeypatch.setattr(
+        appmod, "_resolve_provider", lambda pref: (_FakeRes(), object())
+    )
     monkeypatch.setattr(appmod, "run_turn", _fake_run_turn)
     monkeypatch.setattr(appmod.session_store, "save", lambda record, history: None)
     app = appmod.create_app(TOKEN)
@@ -72,7 +75,9 @@ def test_swarm_auth(client):
     assert client.post("/swarm/none/message", json={}).status_code == 401
 
     # With a token the routes work.
-    r = client.post("/swarm", json={"goal": "ship", "cwd": client._cwd}, headers=_auth())
+    r = client.post(
+        "/swarm", json={"goal": "ship", "cwd": client._cwd}, headers=_auth()
+    )
     assert r.status_code == 201, r.text
     sid = r.json()["id"]
 
@@ -138,7 +143,11 @@ def test_per_role_model_routing(client):
     assert r.status_code == 201, r.text
     spawned = r.json()["sessions"]
     assert len(spawned) == 3
-    assert {s["model"] for s in spawned} == {"model-coord", "model-build", "model-review"}
+    assert {s["model"] for s in spawned} == {
+        "model-coord",
+        "model-build",
+        "model-review",
+    }
     # The sessions really exist with those models.
     listing = client.get("/session", headers=_auth()).json()["sessions"]
     models = {s["model"] for s in listing}
@@ -252,11 +261,37 @@ def test_run_route_drives_orchestrator_and_maps_events(client, monkeypatch):
     sid = r["id"]
     coord = next(s["session_id"] for s in r["sessions"] if s["role"] == "coordinator")
 
-    async def _fake_run_cli_swarm(store, repo_root, swarm_id, *, spawn_fn, on_event=None, **kw):
-        # Emit the two event kinds the adapter maps; no real CLIs/worktrees.
-        on_event({"type": "swarm.needs_operator", "swarm_id": swarm_id,
-                  "task_id": "t1", "session_id": "s1", "paths": ["src/x.py"]})
-        on_event({"type": "swarm.complete", "swarm_id": swarm_id, "task_count": 2})
+    async def _fake_run_cli_swarm(
+        store, repo_root, swarm_id, *, spawn_fn, on_event=None, **kw
+    ):
+        # Emit the containment event kinds the adapter maps; no real CLIs/worktrees.
+        on_event(
+            {
+                "type": "swarm.needs_operator",
+                "swarm_id": swarm_id,
+                "task_id": "t1",
+                "session_id": "s1",
+                "paths": ["src/x.py"],
+            }
+        )
+        on_event(
+            {
+                "type": "swarm.candidate_ready",
+                "swarm_id": swarm_id,
+                "task_id": "t1",
+                "role": "builder-1",
+                "branch": "swarm/s1/builder-1",
+                "worktree": "/tmp/wt",
+                "head": "deadbeef",
+            }
+        )
+        on_event(
+            {
+                "type": "swarm.candidates_ready",
+                "swarm_id": swarm_id,
+                "candidate_count": 1,
+            }
+        )
 
     monkeypatch.setattr(rt, "run_cli_swarm", _fake_run_cli_swarm)
 
@@ -272,7 +307,12 @@ def test_run_route_drives_orchestrator_and_maps_events(client, monkeypatch):
     seen = set()
     while not q.empty():
         seen.add(q.get_nowait().type)
-    assert {"swarm.needs_operator", "swarm.complete"} <= seen
+    assert {
+        "swarm.needs_operator",
+        "swarm.candidate_ready",
+        "swarm.candidates_ready",
+    } <= seen
+    assert "swarm.complete" not in seen
 
     # Unknown swarm -> 404.
     assert client.post("/swarm/nope/run", headers=_auth()).status_code == 404
@@ -298,14 +338,32 @@ def test_swarm_sse_event_types(client):
     # no stdin injection; delivery is via EventBusRenderer.emit only.
     msgs = [
         {"kind": "assign", "task_id": task_id, "session_id": builder},
-        {"kind": "worker_done", "task_id": task_id, "session_id": builder, "summary": "x"},
-        {"kind": "gate", "task_id": task_id, "gate_type": "reviewer_reject", "detail": "no"},
-        {"kind": "needs_operator", "task_id": task_id, "session_id": builder,
-         "tool_name": "fs_write", "path": "src/x.py"},
+        {
+            "kind": "worker_done",
+            "task_id": task_id,
+            "session_id": builder,
+            "summary": "x",
+        },
+        {
+            "kind": "gate",
+            "task_id": task_id,
+            "gate_type": "reviewer_reject",
+            "detail": "no",
+        },
+        {
+            "kind": "needs_operator",
+            "task_id": task_id,
+            "session_id": builder,
+            "tool_name": "fs_write",
+            "path": "src/x.py",
+        },
         {"kind": "complete", "summary": "done"},
     ]
     for m in msgs:
-        assert client.post(f"/swarm/{sid}/message", json=m, headers=_auth()).status_code == 202
+        assert (
+            client.post(f"/swarm/{sid}/message", json=m, headers=_auth()).status_code
+            == 202
+        )
 
     # The coordinator (a registered swarm session) received all 5 via fan-out.
     q = client.app.state.sessions.get(coord).queue
@@ -313,8 +371,11 @@ def test_swarm_sse_event_types(client):
     while not q.empty():
         seen.add(q.get_nowait().type)
     assert {
-        "swarm.assign", "swarm.worker_done", "swarm.gate",
-        "swarm.needs_operator", "swarm.complete",
+        "swarm.assign",
+        "swarm.worker_done",
+        "swarm.gate",
+        "swarm.needs_operator",
+        "swarm.complete",
     } <= seen
 
     # No nudge file was written for delivery (events flow through queues only).
@@ -412,8 +473,12 @@ def test_recall_scoped_injected_into_turn(monkeypatch, tmp_path):
 def test_reviewer_reject_writes_decision(tmp_path):
     store = appmod.SwarmStore(cwd=tmp_path)
     path = store.record_gate_decision(
-        "sw1", "t1", "sess-abc", gate_type="reviewer_reject",
-        confidence=0.8, detail="missing tests",
+        "sw1",
+        "t1",
+        "sess-abc",
+        gate_type="reviewer_reject",
+        confidence=0.8,
+        detail="missing tests",
     )
     text = path.read_text()
     assert "confidence: 0.8" in text

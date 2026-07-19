@@ -12,7 +12,7 @@ export interface SwarmRole {
   auth_pref: string;
 }
 
-export type SwarmTaskState = 'open' | 'assigned' | 'done';
+export type SwarmTaskState = 'open' | 'assigned' | 'candidate_ready' | 'done';
 
 export interface SwarmTask {
   id: string;
@@ -20,6 +20,9 @@ export interface SwarmTask {
   owned_files: string[];
   depends_on: string[];
   state: SwarmTaskState;
+  candidate_branch?: string | null;
+  candidate_worktree?: string | null;
+  candidate_head?: string | null;
 }
 
 export interface SwarmSnapshot {

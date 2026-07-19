@@ -25,6 +25,7 @@ lifecycle and ownership reconciliation. It is intentionally free of any FastAPI 
 SSE import — the caller (the swarm route) passes an `on_event` callback that
 forwards the plain event dicts to the SSE emitter.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -350,7 +351,7 @@ async def run_cli_swarm(
     on_event: EventHook = None,
     max_concurrency: int = 6,
 ) -> list[MemberResult]:
-    """Run every NON-native CLI member of a swarm concurrently, then signal done.
+    """Run every NON-native CLI member of a swarm concurrently.
 
     Pairing roster ↔ tasks: native roles are dropped first (they run via the V25
     in-process path, not here), then the remaining CLI roles are zipped with the
@@ -358,8 +359,9 @@ async def run_cli_swarm(
     coordinator decompose seeds one task per CLI member in roster order — and it
     naturally truncates to `min(len(cli_roles), len(tasks))`, so a roster with no
     matching task simply runs no member. `asyncio.Semaphore` caps in-flight
-    members at `max_concurrency`. A `swarm.complete` event is emitted once all
-    members finish (also for an all-native roster, which runs zero members).
+    members at `max_concurrency`. `swarm.candidates_ready` signals that review
+    candidates remain; `swarm.complete` is reserved for runs with nothing left
+    to integrate.
     """
     import asyncio
 

@@ -1,6 +1,6 @@
 // V24 swarm surface — live ingestion of the V25 swarm SSE plane.
 //
-// The 5 swarm.* events (voss/harness/server/events.py) fan out over the existing
+// The swarm.* events (voss/harness/server/events.py) fan out over the existing
 // SSE bus to every registered swarm session. sseClient routes each event here.
 // This module keeps the LIVE half of the swarm graph the GET /swarm snapshot
 // cannot express:
@@ -63,12 +63,31 @@ export interface SwarmCompleteEvent {
   task_count: number;
   summary?: string | null;
 }
+export interface SwarmCandidateReadyEvent {
+  type: 'swarm.candidate_ready';
+  eid?: string;
+  swarm_id: string;
+  task_id: string;
+  role: string;
+  branch: string;
+  worktree: string;
+  head: string;
+  summary?: string | null;
+}
+export interface SwarmCandidatesReadyEvent {
+  type: 'swarm.candidates_ready';
+  eid?: string;
+  swarm_id: string;
+  candidate_count: number;
+}
 
 export type SwarmEvent =
   | SwarmAssignEvent
   | SwarmWorkerDoneEvent
   | SwarmGateEvent
   | SwarmNeedsOperatorEvent
+  | SwarmCandidateReadyEvent
+  | SwarmCandidatesReadyEvent
   | SwarmCompleteEvent;
 
 /** The binding the GET /swarm snapshot omits: which session/role owns a task. */
@@ -81,7 +100,7 @@ export interface SwarmAssignment {
 
 /** A live swarm edge for the guarded pulse / EventTrace fallback. Honest source. */
 export interface SwarmLiveEdge {
-  type: 'assign' | 'worker_done' | 'gate' | 'needs_operator';
+  type: 'assign' | 'worker_done' | 'gate' | 'needs_operator' | 'candidate_ready';
   taskId: string;
   sessionId: string | null;
   source: string; // "sse_event:swarm.<type>"
@@ -115,6 +134,14 @@ const [swarmDone, setSwarmDone] = createSignal<Set<string>>(new Set());
 // swarm_id → completion (task_count + summary) once swarm.complete arrives.
 const [swarmComplete, setSwarmComplete] = createSignal<
   Record<string, SwarmCompleteEvent>
+>({});
+// task_id → immutable CLI candidate awaiting explicit review/integration.
+const [swarmCandidateReady, setSwarmCandidateReady] = createSignal<
+  Record<string, SwarmCandidateReadyEvent>
+>({});
+// swarm_id → aggregate signal that one or more candidates remain unintegrated.
+const [swarmCandidatesReady, setSwarmCandidatesReady] = createSignal<
+  Record<string, SwarmCandidatesReadyEvent>
 >({});
 // bounded ring of recent live edges (for pulse + EventTrace parity).
 const [swarmLiveEdges, setSwarmLiveEdges] = createSignal<SwarmLiveEdge[]>([]);
@@ -229,6 +256,19 @@ export function ingestSwarmEvent(ev: unknown, ts: number = Date.now()): void {
         timestamp: ts,
       });
       break;
+    case 'swarm.candidate_ready':
+      setSwarmCandidateReady((prev) => ({ ...prev, [ev.task_id]: ev }));
+      pushLiveEdge({
+        type: 'candidate_ready',
+        taskId: ev.task_id,
+        sessionId: null,
+        source: 'sse_event:swarm.candidate_ready',
+        timestamp: ts,
+      });
+      break;
+    case 'swarm.candidates_ready':
+      setSwarmCandidatesReady((prev) => ({ ...prev, [ev.swarm_id]: ev }));
+      break;
     case 'swarm.complete':
       setSwarmComplete((prev) => ({ ...prev, [ev.swarm_id]: ev }));
       break;
@@ -243,6 +283,8 @@ export {
   swarmGates,
   swarmDone,
   swarmComplete,
+  swarmCandidateReady,
+  swarmCandidatesReady,
   swarmLiveEdges,
   swarmEventSeq,
   activeSwarmId,
@@ -256,6 +298,8 @@ export function __resetSwarmLive(): void {
   setSwarmGates({});
   setSwarmDone(new Set<string>());
   setSwarmComplete({});
+  setSwarmCandidateReady({});
+  setSwarmCandidatesReady({});
   setSwarmLiveEdges([]);
   setSwarmEventSeq(0);
   setActiveSwarmId(null);

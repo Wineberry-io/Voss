@@ -416,14 +416,13 @@ mod tests {
         std::fs::create_dir_all(&other).unwrap();
 
         let index = workspace_index(Some(project.to_string_lossy().into_owned()));
-        assert_eq!(authorize_sidecar_cwd(project.to_str().unwrap(), &index).unwrap(), project);
+        assert_eq!(
+            authorize_sidecar_cwd(project.to_str().unwrap(), &index).unwrap(),
+            std::fs::canonicalize(&project).unwrap()
+        );
         assert!(authorize_sidecar_cwd(child.to_str().unwrap(), &index).is_err());
         assert!(authorize_sidecar_cwd(other.to_str().unwrap(), &index).is_err());
-        assert!(authorize_sidecar_cwd(
-            project.to_str().unwrap(),
-            &workspace_index(None),
-        )
-        .is_err());
+        assert!(authorize_sidecar_cwd(project.to_str().unwrap(), &workspace_index(None),).is_err());
 
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -848,43 +847,6 @@ fn emit_new_swarm_results(
             eprintln!("[voss-app] swarm result event failed: {e}");
         }
     }
-}
-
-#[tauri::command]
-fn get_env_var(name: String) -> Result<String, String> {
-    std::env::var(&name).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn write_swarm_files(
-    workspace_path: String,
-    manifest_json: String,
-    tasks: Vec<(String, String)>,
-    shared_context: String,
-) -> Result<(), String> {
-    if workspace_path.trim().is_empty() {
-        return Err("workspace_path must not be empty".to_string());
-    }
-
-    let swarm_dir = Path::new(&workspace_path).join(".voss").join("swarm");
-    let tasks_dir = swarm_dir.join("tasks");
-    let results_dir = swarm_dir.join("results");
-    let shared_dir = swarm_dir.join("shared");
-    std::fs::create_dir_all(&tasks_dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&results_dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&shared_dir).map_err(|e| e.to_string())?;
-
-    let manifest_target = swarm_dir.join("manifest.json");
-    let manifest_tmp = swarm_dir.join("manifest.json.tmp");
-    std::fs::write(&manifest_tmp, manifest_json).map_err(|e| e.to_string())?;
-    std::fs::rename(&manifest_tmp, &manifest_target).map_err(|e| e.to_string())?;
-
-    for (filename, content) in tasks {
-        std::fs::write(tasks_dir.join(filename), content).map_err(|e| e.to_string())?;
-    }
-
-    std::fs::write(shared_dir.join("context.md"), shared_context).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -1489,19 +1451,36 @@ fn run_decision(
 // kill_on_drop, T-V15-02). Only the Tauri side can spawn the server (V14
 // Pitfall 4 — the webview launcher imports node:child_process).
 
+fn authorize_sidecar_cwd(cwd: &str, index: &WorkspacesIndex) -> Result<PathBuf, String> {
+    let canonical = validate_workspace_cwd(cwd, &[])?;
+    let registered = index
+        .workspaces
+        .iter()
+        .filter_map(|workspace| workspace.project_path.as_deref())
+        .filter_map(|path| std::fs::canonicalize(path).ok())
+        .any(|path| path == canonical);
+    if !registered {
+        return Err("workspace is not a registered project".to_string());
+    }
+    Ok(canonical)
+}
+
 #[tauri::command]
 async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeHandshake, String> {
-    // T-V15-01: canonicalize + validate before the cwd reaches a spawn arg.
-    let canonical = validate_workspace_cwd(&cwd, &[])?;
+    // Canonicalize and require an exact persisted project-workspace match before
+    // the webview-controlled cwd reaches a process-spawn argument.
+    let index = workspaces::load_workspaces_index();
+    let canonical = authorize_sidecar_cwd(&cwd, &index)?;
+    let key = canonical.to_string_lossy().into_owned();
 
     // Reuse-if-alive; pid() == None means the child was reaped — drop the
     // stale entry and respawn (Pitfall 5). Lock scope closes before any await.
     {
         let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
-        match map.get(&cwd) {
+        match map.get(&key) {
             Some(serve) if serve.pid().is_some() => return Ok(serve.handshake.clone()),
             Some(_) => {
-                map.remove(&cwd);
+                map.remove(&key);
             }
             None => {}
         }
@@ -1514,7 +1493,7 @@ async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeH
     let handshake = serve.handshake.clone();
 
     let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
-    map.insert(cwd, serve);
+    map.insert(key, serve);
     Ok(handshake)
 }
 
@@ -1574,8 +1553,6 @@ pub fn run() {
             load_session,
             save_global_session,
             load_global_session,
-            get_env_var,
-            write_swarm_files,
             watch_swarm_results,
             stop_swarm_watcher,
             load_workspaces_index,
