@@ -53,7 +53,9 @@ fn test_pty_spawn_env() {
     // PTY-01: spawned shell inherits TERM=xterm-256color + COLORTERM=truecolor.
     let (session, reader, _pause) = spawn_session(24, 80, None).expect("spawn");
     session
-        .write(b"printf 'T=%s C=%s\\n' \"$TERM\" \"$COLORTERM\"\n")
+        .write(
+            b"printf 'T=%s C=%s VE=%s VA=%s\\n' \"$TERM\" \"$COLORTERM\" \"${VOSS_EMBEDDED-unset}\" \"${VOSS_AGENT_ID-unset}\"\n",
+        )
         .expect("write");
     let out = read_until(reader, "T=xterm-256color", Duration::from_secs(8));
     session.kill().ok();
@@ -64,6 +66,10 @@ fn test_pty_spawn_env() {
     assert!(
         out.contains("C=truecolor"),
         "COLORTERM not set; got: {out:?}"
+    );
+    assert!(
+        out.contains("VE=unset VA=unset"),
+        "plain shell received Voss environment; got: {out:?}"
     );
 }
 

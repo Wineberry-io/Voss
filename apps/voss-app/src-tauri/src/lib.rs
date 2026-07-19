@@ -23,7 +23,7 @@ use voss_app_core::project::{self, ProjectInfo};
 use voss_app_core::pty::reader::start_reader;
 use voss_app_core::pty::writer::validate_write;
 use voss_app_core::pty::{
-    foreground, spawn_command_session_managed, spawn_command_session_with_env,
+    foreground, spawn_command_session_managed, spawn_command_session_with_env, spawn_session,
 };
 use voss_app_core::session::{self, SessionFile};
 use voss_app_core::sidecar::{
@@ -128,25 +128,30 @@ fn save_custom_agents(agents: Vec<CustomAgent>) -> Result<(), String> {
 // `invoke('spawn_pty', …)` contract and app-managed `Arc<PtyRegistry>` state.
 
 type Reg<'a> = tauri::State<'a, Arc<PtyRegistry>>;
-type AgentDb<'a> = tauri::State<'a, Mutex<Option<Connection>>>;
+type AgentRegistryMap = HashMap<PathBuf, Connection>;
+type AgentDb<'a> = tauri::State<'a, Mutex<AgentRegistryMap>>;
 type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServe>>>;
 
 fn ensure_registry<'a>(
-    db: &'a Mutex<Option<Connection>>,
+    db: &'a Mutex<AgentRegistryMap>,
     workspace_path: Option<&str>,
-) -> Result<std::sync::MutexGuard<'a, Option<Connection>>, String> {
+) -> Result<(std::sync::MutexGuard<'a, AgentRegistryMap>, PathBuf), String> {
     let mut guard = db
         .lock()
         .map_err(|_| "agent registry lock poisoned".to_string())?;
-    if guard.is_none() {
-        let path = match workspace_path {
-            Some(ws) => registry_path(Path::new(ws)),
-            None => global_registry_path(),
-        };
+    let path = match workspace_path {
+        Some(ws) => {
+            let root = std::fs::canonicalize(ws)
+                .map_err(|_| "workspace path does not exist".to_string())?;
+            registry_path(&root)
+        }
+        None => global_registry_path(),
+    };
+    if !guard.contains_key(&path) {
         let conn = open_registry(&path).map_err(|e| e.to_string())?;
-        *guard = Some(conn);
+        guard.insert(path.clone(), conn);
     }
-    Ok(guard)
+    Ok((guard, path))
 }
 
 fn is_voss_cli_binary(cli_binary: &str) -> bool {
@@ -245,9 +250,9 @@ async fn spawn_agent(
     db: AgentDb<'_>,
     pty_state: Reg<'_>,
 ) -> Result<String, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
 
     let embedded_env = env_for_embedded_cli(&cli_binary, &cli_args);
@@ -320,9 +325,9 @@ async fn spawn_managed_agent(
     db: AgentDb<'_>,
     pty_state: Reg<'_>,
 ) -> Result<ManagedSpawnResult, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
 
     let embedded_env = env_for_embedded_cli(&cli_binary, &cli_args);
@@ -378,7 +383,7 @@ async fn spawn_managed_agent(
 #[cfg(test)]
 mod tests {
     use super::{
-        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
+        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension, ensure_registry,
         env_for_embedded_cli, is_interactive_voss_command,
     };
     use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
@@ -549,6 +554,27 @@ mod tests {
     }
 
     #[test]
+    fn registries_are_keyed_by_canonical_workspace() {
+        let base = unique_tmp("registries");
+        let first = base.join("first");
+        let second = base.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        let registries = std::sync::Mutex::new(std::collections::HashMap::new());
+
+        let (guard, first_key) =
+            ensure_registry(&registries, first.to_str()).expect("first registry");
+        drop(guard);
+        let (guard, second_key) =
+            ensure_registry(&registries, second.to_str()).expect("second registry");
+        assert_ne!(first_key, second_key);
+        assert_eq!(guard.len(), 2);
+        drop(guard);
+
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn enumerate_runs_filters_flat_session_files() {
         let base = unique_tmp("enum");
         let sessions = base.join(".voss").join("sessions");
@@ -600,10 +626,11 @@ fn get_active_agents(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<Vec<AgentEntry>, String> {
-    let Ok(mut guard) = ensure_registry(db.inner(), workspace_path.as_deref()) else {
+    let Ok((mut guard, registry_key)) = ensure_registry(db.inner(), workspace_path.as_deref())
+    else {
         return Ok(Vec::new());
     };
-    let Some(conn) = guard.as_mut() else {
+    let Some(conn) = guard.get_mut(&registry_key) else {
         return Ok(Vec::new());
     };
     Ok(registry_get_active_agents(conn).unwrap_or_else(|e| {
@@ -618,18 +645,18 @@ fn mark_agent_stopped(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<(), String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     mark_stopped(conn, &pane_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn update_agents_last_seen(workspace_path: Option<String>, db: AgentDb<'_>) -> Result<(), String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     update_last_seen_all(conn).map_err(|e| e.to_string())
 }
@@ -640,9 +667,9 @@ fn sweep_orphan_agents(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<usize, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     sweep_orphans(conn, &valid_pane_ids).map_err(|e| e.to_string())
 }
@@ -653,24 +680,9 @@ async fn spawn_pty(
     rows: u16,
     cols: u16,
     cwd: Option<String>,
-    voss_agent_id: Option<String>,
     state: Reg<'_>,
 ) -> Result<String, String> {
-    // Plain-shell spawn routed through the env-carrying path so every pane
-    // receives VOSS_AGENT_ID (VBUS-03 D-11). Mirrors spawn_session's
-    // behavior: $SHELL + VOSS_EMBEDDED=1 (TERM/COLORTERM set by the callee).
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let full_env = build_env_with_agent_id(
-        vec![("VOSS_EMBEDDED".to_string(), "1".to_string())],
-        voss_agent_id,
-    );
-    let env_refs: Vec<(&str, &str)> = full_env
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    let (session, reader, pause_rx) =
-        spawn_command_session_with_env(&shell, &[], &env_refs, rows, cols, cwd)
-            .map_err(|e| e.to_string())?;
+    let (session, reader, pause_rx) = spawn_session(rows, cols, cwd).map_err(|e| e.to_string())?;
     let registry: Arc<PtyRegistry> = Arc::clone(state.inner());
     let id = registry.insert(session);
     start_reader(id.clone(), reader, pause_rx, on_data, registry);
@@ -1520,7 +1532,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(PtyRegistry::default()))
         .manage(Mutex::new(GridState::default()))
-        .manage(Mutex::new(None::<Connection>))
+        .manage(Mutex::new(AgentRegistryMap::new()))
         .manage(SwarmWatchState::default())
         .manage(KeymapWatchState::default())
         .manage(Mutex::new(HashMap::<String, VossServe>::new()))

@@ -84,6 +84,13 @@ impl TryFrom<&AgentEvent> for UiProjection {
             AgentEvent::BudgetUpdated(_) => Err(()),
             AgentEvent::ConfidenceUpdated(_) => Err(()),
             AgentEvent::GateUpdated(_) => Err(()),
+            AgentEvent::SwarmAssign(_)
+            | AgentEvent::SwarmCandidateReady(_)
+            | AgentEvent::SwarmCandidatesReady(_)
+            | AgentEvent::SwarmWorkerDone(_)
+            | AgentEvent::SwarmGate(_)
+            | AgentEvent::SwarmNeedsOperator(_)
+            | AgentEvent::SwarmComplete(_) => Err(()),
         }
     }
 }

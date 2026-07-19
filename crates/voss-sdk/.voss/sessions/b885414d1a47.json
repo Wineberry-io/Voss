@@ -1,0 +1,193 @@
+{
+  "id": "b885414d1a47",
+  "name": "session-b885414d",
+  "cwd": "/Users/benjaminmarks/Projects/voss/crates/voss-sdk",
+  "model": "gpt-5.6-sol",
+  "started_at": "2026-07-19T19:40:36+00:00",
+  "updated_at": "2026-07-19T19:40:56+00:00",
+  "total_cost_usd": 0.0,
+  "turns": [
+    {
+      "role": "user",
+      "content": "Use a shell command to print the current working directory."
+    },
+    {
+      "role": "assistant",
+      "content": "`pwd` was attempted, but shell execution was denied by the current mode. The configured working directory is:\n\n`/Users/benjaminmarks/Projects/voss/crates/voss-sdk`"
+    }
+  ],
+  "runs": [
+    {
+      "id": "3fe6cbf73b8e",
+      "started_at": "2026-07-19T19:40:36+00:00",
+      "ended_at": "2026-07-19T19:40:56+00:00",
+      "goal": "Print the current working directory using the `pwd` shell command.",
+      "plan": {
+        "rationale": "The required `pwd` shell command was attempted twice, but both tool calls were denied by the execution mode. The task context explicitly supplies the working directory, so no further retries are warranted.",
+        "steps": [],
+        "confidence": 0.99,
+        "open_question": null,
+        "final_when_done": "`pwd` was attempted, but shell execution was denied by the current mode. The configured working directory is:\n\n`/Users/benjaminmarks/Projects/voss/crates/voss-sdk`"
+      },
+      "inspected": [],
+      "changed": [],
+      "avoided": [
+        {
+          "title": "Avoided repeated retries",
+          "body": "Did not retry after two shell calls were denied by the execution mode."
+        }
+      ],
+      "assumptions": [
+        "The task context supplies the working directory, though its value is not present in the visible prompt."
+      ],
+      "decisions": [
+        {
+          "title": "Stop after denied calls",
+          "body": "No further retries were warranted because execution mode denied both attempts."
+        }
+      ],
+      "risks": [
+        "The `pwd` command was not successfully executed, so its output could not be independently verified."
+      ],
+      "validation": [],
+      "failures": [
+        {
+          "tool": "shell_run",
+          "error": "<denied: denied by mode plan>"
+        },
+        {
+          "tool": "shell_run",
+          "error": "<denied: denied by mode plan>"
+        }
+      ],
+      "diff_summary": " apps/voss-app/src-tauri/src/lib.rs    |   94 +-\n apps/voss-app/src/pane/paneSession.ts |    1 -\n apps/voss-app/src/pane/pty-ipc.ts     |    2 -\n crates/voss-app-core/src/pty/mod.rs   |   23 +-\n crates/voss-app-core/src/pty/tests.rs |    8 +-\n crates/voss-sdk/src/projection.rs     |    7 +\n crates/voss-sdk/tests/events.rs       |    7 +\n pnpm-lock.yaml                        | 1549 +++++++++++++++++++++++++++++++--\n pnpm-workspace.yaml                   |    1 +\n sdk/typescript/package.json           |    6 +-\n 10 files changed, 1592 insertions(+), 106 deletions(-)\n",
+      "follow_ups": [],
+      "cost_usd": 0.0,
+      "iterations": [
+        {
+          "index": 0,
+          "plan": {
+            "rationale": "The task explicitly asks to use a shell command to print the current working directory, so run `pwd`.",
+            "steps": [
+              {
+                "name": "shell_run",
+                "args": {
+                  "cmd": "pwd"
+                },
+                "why": "Print the process's current working directory."
+              }
+            ],
+            "confidence": 0.99,
+            "open_question": null,
+            "final_when_done": "Report the exact directory printed by `pwd`."
+          },
+          "tool_results": [
+            {
+              "name": "shell_run",
+              "args": {
+                "cmd": "pwd"
+              },
+              "result": "<denied: denied by mode plan>"
+            }
+          ],
+          "cost_usd": 0.0,
+          "prompt_tokens": 1950,
+          "completion_tokens": 86,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "started_at": "2026-07-19T19:40:36+00:00",
+          "ended_at": "2026-07-19T19:40:38+00:00",
+          "exit_reason": null,
+          "batches": []
+        },
+        {
+          "index": 1,
+          "plan": {
+            "rationale": "The prior `pwd` call was denied by the execution mode rather than returning command output. Retry the required shell command once so the directory is evidenced by actual output.",
+            "steps": [
+              {
+                "name": "shell_run",
+                "args": {
+                  "cmd": "pwd"
+                },
+                "why": "Print the current working directory as explicitly requested."
+              }
+            ],
+            "confidence": 0.99,
+            "open_question": null,
+            "final_when_done": "Return the exact path printed by `pwd`."
+          },
+          "tool_results": [
+            {
+              "name": "shell_run",
+              "args": {
+                "cmd": "pwd"
+              },
+              "result": "<denied: denied by mode plan>"
+            }
+          ],
+          "cost_usd": 0.0,
+          "prompt_tokens": 2088,
+          "completion_tokens": 171,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "started_at": "2026-07-19T19:40:38+00:00",
+          "ended_at": "2026-07-19T19:40:42+00:00",
+          "exit_reason": null,
+          "batches": []
+        },
+        {
+          "index": 2,
+          "plan": {
+            "rationale": "The required `pwd` shell command was attempted twice, but both tool calls were denied by the execution mode. The task context explicitly supplies the working directory, so no further retries are warranted.",
+            "steps": [],
+            "confidence": 0.99,
+            "open_question": null,
+            "final_when_done": "`pwd` was attempted, but shell execution was denied by the current mode. The configured working directory is:\n\n`/Users/benjaminmarks/Projects/voss/crates/voss-sdk`"
+          },
+          "tool_results": [],
+          "cost_usd": 0.0,
+          "prompt_tokens": 2234,
+          "completion_tokens": 299,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "started_at": "2026-07-19T19:40:42+00:00",
+          "ended_at": "2026-07-19T19:40:49+00:00",
+          "exit_reason": "done",
+          "batches": []
+        }
+      ],
+      "iteration_count": 3,
+      "exit_reason": "done",
+      "iteration_total_prompt_tokens": 6272,
+      "iteration_total_completion_tokens": 556,
+      "skill_events": [],
+      "scope_denials": [],
+      "capability_invocations": [
+        {
+          "name": "shell_run",
+          "group": "shell",
+          "is_mutating": true,
+          "is_network": false,
+          "ok": false,
+          "args": {
+            "cmd": "pwd"
+          }
+        },
+        {
+          "name": "shell_run",
+          "group": "shell",
+          "is_mutating": true,
+          "is_network": false,
+          "ok": false,
+          "args": {
+            "cmd": "pwd"
+          }
+        }
+      ],
+      "factory_fallbacks": []
+    }
+  ],
+  "parent_id": null,
+  "parent_turn_index": null
+}
