@@ -219,6 +219,23 @@ class SwarmWorkerDone(_SwarmBase):
     summary: str | None = None
 
 
+class SwarmCandidateReady(_SwarmBase):
+    type: Literal["swarm.candidate_ready"] = "swarm.candidate_ready"
+    swarm_id: str
+    task_id: str
+    role: str
+    branch: str
+    worktree: str
+    head: str
+    summary: str | None = None
+
+
+class SwarmCandidatesReady(_SwarmBase):
+    type: Literal["swarm.candidates_ready"] = "swarm.candidates_ready"
+    swarm_id: str
+    candidate_count: int
+
+
 class SwarmGate(_SwarmBase):
     type: Literal["swarm.gate"] = "swarm.gate"
     swarm_id: str
@@ -269,6 +286,8 @@ AgentEvent = Annotated[
         ConfidenceUpdated,
         GateUpdated,
         SwarmAssign,
+        SwarmCandidateReady,
+        SwarmCandidatesReady,
         SwarmWorkerDone,
         SwarmGate,
         SwarmNeedsOperator,
