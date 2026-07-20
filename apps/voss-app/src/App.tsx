@@ -36,7 +36,7 @@ import AttentionPanel from './org/attention/AttentionPanel';
 import { attentionQueue } from './org/attention/attentionQueue';
 import { registerTerminalCard } from './org/model/bridge';
 import { resolveTier, hookCapableCli } from './org/capabilityTier';
-import RunCommandBar, {
+import {
   dispatchRunSpec,
   type RunNativeClient,
   type SpawnAgentFn,
@@ -59,7 +59,6 @@ import {
   setOpenInGridRequest,
   openInReviewRequest,
   setOpenInReviewRequest,
-  setSelectedCardId,
 } from './org/selection';
 import BoardSummaryStrip from './components/BoardSummaryStrip';
 import { collectLeaves } from './grid/tree';
@@ -96,6 +95,10 @@ import { createPrefixMode } from './command-palette/prefixMode';
 import { setAsAppMenu } from './command-palette/nativeMenu';
 import { showToast } from './command-palette/toast';
 import { applyWindowEffects } from './appearance/windowEffects';
+import {
+  openOrchestrationConsole,
+  type OrchestrationView,
+} from './orchestration/window';
 import { buildQuickOpenItems } from './command-palette/quickOpen';
 import type {
   ActiveLayout,
@@ -663,8 +666,7 @@ export default function App() {
   createEffect(() => {
     const cardId = openInReviewRequest();
     if (!cardId) return;
-    setSelectedCardId(cardId);
-    setActiveView('review');
+    void openConsole('review', cardId);
     setOpenInReviewRequest(null);
   });
 
@@ -915,6 +917,33 @@ export default function App() {
   const workspacePath = () => {
     const ws = activeMounted();
     return ws?.project()?.path ?? ws?.projectLessCwd();
+  };
+
+  const openConsole = async (
+    view: OrchestrationView = 'review',
+    cardId?: string,
+  ): Promise<void> => {
+    const cwd = activeMounted()?.project()?.path;
+    if (!cwd) {
+      showToast('warning', 'Open a project workspace to use Voss orchestration.');
+      return;
+    }
+    try {
+      await openOrchestrationConsole(cwd, view, cardId);
+    } catch (cause) {
+      showToast(
+        'error',
+        cause instanceof Error ? cause.message : 'Could not open Voss orchestration.',
+      );
+    }
+  };
+
+  const navigatePortal = (view: PortalView): void => {
+    if (view === 'review' || view === 'swarm-map' || view === 'memory') {
+      void openConsole(view);
+      return;
+    }
+    setActiveView(view);
   };
 
   const saveCurrentLayout = async (
@@ -1439,18 +1468,18 @@ export default function App() {
       return;
     }
 
-    // Cmd+Shift+O: toggle the grid ↔ Review surface (grid stays mounted via display:none)
+    // Cmd+Shift+O: open the separately privileged orchestration console.
     if (e.metaKey && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
-      setActiveView((p) => (p === 'grid' ? 'review' : 'grid'));
+      void openConsole('review');
       e.preventDefault();
       e.stopImmediatePropagation();
       return;
     }
 
-    // Cmd+K: toggle the global "Ask Voss to…" composer (V24-04). metaKey only,
-    // no shift/alt — distinct from the ⌘1-9 pane shortcuts and ⌘⇧/⌘⌥ chords.
+    // Cmd+K opens the optional Voss console; the terminal renderer never
+    // receives sidecar authority.
     if (e.metaKey && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
-      setComposerOpen((open) => !open);
+      void openConsole('review');
       e.preventDefault();
       e.stopImmediatePropagation();
       return;
@@ -1462,7 +1491,7 @@ export default function App() {
       const idx = Number(e.key) - 1;
       const item = PORTAL_ITEMS[idx];
       if (item) {
-        setActiveView(item.id);
+        navigatePortal(item.id);
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -1593,7 +1622,7 @@ export default function App() {
         ).toUpperCase()}
         liveState={liveLabel()}
         currentSafetyMode={currentSafetyMode()}
-        onOpenComposer={() => setComposerOpen(true)}
+        onOpenComposer={() => void openConsole('review')}
       />
       <div
         style={{
@@ -1627,12 +1656,12 @@ export default function App() {
         >
           <PortalRail
             activeView={activeView()}
-            onNavTo={setActiveView}
+            onNavTo={navigatePortal}
             expanded={portalExpanded()}
             onToggleExpanded={togglePortalExpanded}
             activeLayout={activeMounted()?.activeLayout() ?? 'custom'}
             onLayoutSelect={onLayoutSelect}
-            onOpenComposer={() => setComposerOpen(true)}
+            onOpenComposer={() => void openConsole('review')}
           />
           <AgentSidebar
             collapsed={sidebarCollapsed()}
@@ -1656,13 +1685,6 @@ export default function App() {
           {/* Work-surface column: D-03 always-on RunCommandBar strip ABOVE the
               grid/cockpit swap — present in BOTH Live Work and Run Review. */}
           <div style={{ flex: '1', 'min-height': '0', 'min-width': '0', display: 'flex', 'flex-direction': 'column', position: 'relative' }}>
-          <RunCommandBar
-            cwd={workspacePath() ?? ''}
-            cliBinary="voss"
-            client={runBarNativeClient}
-            resolvePaneId={runBarResolvePaneId}
-            spawnAgent={runBarSpawnAgent}
-          />
           <WorkspaceTabBar
             class="workspace-tabbar--grid"
             workspaces={workspaceStore.workspaces()}
@@ -1682,7 +1704,7 @@ export default function App() {
                 container is display:none in Run Review, where the cockpit
                 shows the full board). Renders nothing until a run snapshot
                 is loaded. Chip click = opt-in jump to Run Review. */}
-            <BoardSummaryStrip onOpen={() => setActiveView('review')} />
+            <BoardSummaryStrip onOpen={() => void openConsole('review')} />
             <For each={workspaceIds()}>
               {(workspaceId) => {
                 const ws = () => mountedById().get(workspaceId);
@@ -1767,12 +1789,12 @@ export default function App() {
               OrgViewShell (lazy thunk → only built when active). */}
           <PortalShell
             activeView={activeView()}
-            onNavTo={setActiveView}
+            onNavTo={navigatePortal}
             projectName={activeMounted()?.project()?.name ?? ''}
             projectPath={activeMounted()?.project()?.path ?? null}
             gitBranch={activeMounted()?.project()?.gitBranch ?? null}
             onNewSession={handleNewWorkspace}
-            onNewTask={() => setComposerOpen(true)}
+            onNewTask={() => void openConsole('review')}
             contextSlot={() => {
               const id = focusedPaneId();
               return (
@@ -1855,7 +1877,7 @@ export default function App() {
           budgetLimit={runBudgetTotals().limit}
           onToggleSidebar={toggleSidebar}
           orgViewOpen={activeView() !== 'grid'}
-          onToggleOrgView={() => setActiveView((p) => (p === 'grid' ? 'review' : 'grid'))}
+          onToggleOrgView={() => void openConsole('review')}
           attentionCount={attentionQueue().length}
           attentionBlocking={attentionBlocking()}
           onToggleAttention={() => setAttentionOpen((p) => !p)}

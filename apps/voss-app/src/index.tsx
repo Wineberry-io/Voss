@@ -1,6 +1,8 @@
 import { render } from 'solid-js/web';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import App from './App';
+import OrchestrationConsole from './orchestration/OrchestrationConsole';
 import { applyThemeOverrides } from './theme/applyTheme';
 import { getBundledTheme } from './themes/themeCatalog';
 import { applyThemeToRuntime, getCommittedTheme } from './themes/themeRuntime';
@@ -35,5 +37,13 @@ async function applySavedTheme(): Promise<void> {
 
 void applySavedTheme()
   .finally(() => {
-    render(() => <App />, root);
+    render(
+      () =>
+        getCurrentWindow().label === 'orchestration' ? (
+          <OrchestrationConsole />
+        ) : (
+          <App />
+        ),
+      root,
+    );
   });
