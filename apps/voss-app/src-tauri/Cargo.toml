@@ -21,3 +21,5 @@ serde_json = { workspace = true }
 dirs = { workspace = true }
 voss-app-core = { path = "../../../crates/voss-app-core" }
 rusqlite = { version = "0.39", features = ["bundled"] }
+reqwest = { workspace = true }
+uuid = { workspace = true }

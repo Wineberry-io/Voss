@@ -130,7 +130,15 @@ fn save_custom_agents(agents: Vec<CustomAgent>) -> Result<(), String> {
 type Reg<'a> = tauri::State<'a, Arc<PtyRegistry>>;
 type AgentRegistryMap = HashMap<PathBuf, Connection>;
 type AgentDb<'a> = tauri::State<'a, Mutex<AgentRegistryMap>>;
-type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServe>>>;
+struct VossServeEntry {
+    id: String,
+    root: PathBuf,
+    serve: VossServe,
+}
+
+type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServeEntry>>>;
+type VossStreamTasks = Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>;
+type VossStreamMap<'a> = tauri::State<'a, VossStreamTasks>;
 
 fn ensure_registry<'a>(
     db: &'a Mutex<AgentRegistryMap>,
@@ -383,8 +391,9 @@ async fn spawn_managed_agent(
 #[cfg(test)]
 mod tests {
     use super::{
-        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension, ensure_registry,
-        env_for_embedded_cli, is_interactive_voss_command,
+        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
+        decode_sse_frame, ensure_registry, env_for_embedded_cli, is_interactive_voss_command,
+        sidecar_url, take_sse_frame, SidecarHandle,
     };
     use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
 
@@ -430,6 +439,34 @@ mod tests {
         assert!(authorize_sidecar_cwd(project.to_str().unwrap(), &workspace_index(None),).is_err());
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sidecar_handle_never_serializes_port_or_token() {
+        let value = serde_json::to_value(SidecarHandle {
+            sidecar_id: "opaque-id".into(),
+        })
+        .unwrap();
+        assert_eq!(value, serde_json::json!({"sidecarId": "opaque-id"}));
+    }
+
+    #[test]
+    fn sidecar_url_encodes_path_segments() {
+        let url = sidecar_url(1234, &["session", "../other", "events"]).unwrap();
+        assert!(!url.as_str().contains("/../"));
+        assert!(url.as_str().contains("..%2Fother"));
+    }
+
+    #[test]
+    fn sidecar_sse_parser_handles_chunked_crlf_frames() {
+        let mut buffer =
+            b"data: {\"type\":\"thinking\"}\r\n\r\ndata: {\"type\":\"final\"}".to_vec();
+        let first = take_sse_frame(&mut buffer).unwrap();
+        assert_eq!(
+            decode_sse_frame(&first).unwrap()["type"],
+            serde_json::json!("thinking")
+        );
+        assert!(take_sse_frame(&mut buffer).is_none());
     }
 
     /// VBUS-03 camelCase IPC round-trip guard (V14 AgentEntry lesson): a
@@ -1477,8 +1514,336 @@ fn authorize_sidecar_cwd(cwd: &str, index: &WorkspacesIndex) -> Result<PathBuf, 
     Ok(canonical)
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarHandle {
+    sidecar_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum SidecarOperation {
+    CreateSession,
+    ListSessions,
+    ListSaved,
+    GetSession {
+        session_id: String,
+    },
+    DeleteSession {
+        session_id: String,
+    },
+    PostMessage {
+        session_id: String,
+        text: String,
+        mode: String,
+    },
+    AbortSession {
+        session_id: String,
+    },
+    GetCost {
+        session_id: String,
+    },
+    Doctor,
+    ReplyPermission {
+        session_id: String,
+        id: String,
+        choice: String,
+    },
+    Memory {
+        query: Option<String>,
+        top_k: u32,
+    },
+    GetSwarm {
+        swarm_id: String,
+    },
+    CreateSwarm {
+        goal: String,
+        builders: u32,
+        roster: Option<Vec<serde_json::Value>>,
+    },
+    RunSwarm {
+        swarm_id: String,
+    },
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum SidecarStreamEvent {
+    Event { event: serde_json::Value },
+    End,
+    Error { message: String },
+}
+
+fn sidecar_connection(
+    sidecar_id: &str,
+    state: &Mutex<HashMap<String, VossServeEntry>>,
+) -> Result<(ServeHandshake, PathBuf), String> {
+    let map = state.lock().map_err(|_| "lock poisoned".to_string())?;
+    map.values()
+        .find(|entry| entry.id == sidecar_id && entry.serve.pid().is_some())
+        .map(|entry| (entry.serve.handshake.clone(), entry.root.clone()))
+        .ok_or_else(|| "sidecar handle is unavailable".to_string())
+}
+
+fn sidecar_url(port: u16, segments: &[&str]) -> Result<reqwest::Url, String> {
+    let mut url = reqwest::Url::parse(&format!("http://127.0.0.1:{port}"))
+        .map_err(|_| "invalid sidecar endpoint".to_string())?;
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|_| "invalid sidecar endpoint".to_string())?;
+        path.clear();
+        path.extend(segments);
+    }
+    Ok(url)
+}
+
+async fn send_sidecar_request(
+    token: &str,
+    request: reqwest::RequestBuilder,
+) -> Result<serde_json::Value, String> {
+    let response = request
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "sidecar request failed".to_string())?;
+    let status = response.status();
+    if response
+        .content_length()
+        .is_some_and(|length| length > 4_194_304)
+    {
+        return Err("sidecar response exceeded limit".to_string());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|_| "sidecar response failed".to_string())?;
+    if bytes.len() > 4_194_304 {
+        return Err("sidecar response exceeded limit".to_string());
+    }
+    if !status.is_success() {
+        let detail = serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .and_then(|value| value.get("detail").cloned())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| status.to_string());
+        return Err(format!("sidecar request failed: {detail}"));
+    }
+    if bytes.is_empty() {
+        return Ok(serde_json::Value::Null);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "invalid sidecar response".to_string())
+}
+
 #[tauri::command]
-async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeHandshake, String> {
+async fn call_voss_sidecar(
+    sidecar_id: String,
+    operation: SidecarOperation,
+    state: VossServeMap<'_>,
+) -> Result<serde_json::Value, String> {
+    let (handshake, root) = sidecar_connection(&sidecar_id, state.inner())?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|_| "sidecar client unavailable".to_string())?;
+    let root = root.to_string_lossy().into_owned();
+
+    let request = match operation {
+        SidecarOperation::CreateSession => client
+            .post(sidecar_url(handshake.port, &["session"])?)
+            .json(&serde_json::json!({"auth": "auto", "cwd": root})),
+        SidecarOperation::ListSessions => client.get(sidecar_url(handshake.port, &["session"])?),
+        SidecarOperation::ListSaved => {
+            let mut url = sidecar_url(handshake.port, &["sessions", "saved"])?;
+            url.query_pairs_mut().append_pair("cwd", &root);
+            client.get(url)
+        }
+        SidecarOperation::GetSession { session_id } => {
+            client.get(sidecar_url(handshake.port, &["session", &session_id])?)
+        }
+        SidecarOperation::DeleteSession { session_id } => {
+            client.delete(sidecar_url(handshake.port, &["session", &session_id])?)
+        }
+        SidecarOperation::PostMessage {
+            session_id,
+            text,
+            mode,
+        } => client
+            .post(sidecar_url(
+                handshake.port,
+                &["session", &session_id, "message"],
+            )?)
+            .json(&serde_json::json!({
+                "mode": mode,
+                "parts": [{"type": "text", "text": text}],
+            })),
+        SidecarOperation::AbortSession { session_id } => client.post(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "abort"],
+        )?),
+        SidecarOperation::GetCost { session_id } => client.get(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "cost"],
+        )?),
+        SidecarOperation::Doctor => {
+            let mut url = sidecar_url(handshake.port, &["doctor"])?;
+            url.query_pairs_mut().append_pair("cwd", &root);
+            client.get(url)
+        }
+        SidecarOperation::ReplyPermission {
+            session_id,
+            id,
+            choice,
+        } => client
+            .post(sidecar_url(
+                handshake.port,
+                &["session", &session_id, "permission"],
+            )?)
+            .json(&serde_json::json!({"v": 1, "id": id, "choice": choice})),
+        SidecarOperation::Memory { query, top_k } => {
+            let mut url = sidecar_url(handshake.port, &["memory"])?;
+            {
+                let mut query_pairs = url.query_pairs_mut();
+                query_pairs.append_pair("cwd", &root);
+                if let Some(query) = query.filter(|value| !value.trim().is_empty()) {
+                    query_pairs.append_pair("q", query.trim());
+                    query_pairs.append_pair("top_k", &top_k.to_string());
+                }
+            }
+            client.get(url)
+        }
+        SidecarOperation::GetSwarm { swarm_id } => {
+            client.get(sidecar_url(handshake.port, &["swarm", &swarm_id])?)
+        }
+        SidecarOperation::CreateSwarm {
+            goal,
+            builders,
+            roster,
+        } => client
+            .post(sidecar_url(handshake.port, &["swarm"])?)
+            .json(&serde_json::json!({
+                "goal": goal,
+                "builders": builders,
+                "cwd": root,
+                "roster": roster,
+            })),
+        SidecarOperation::RunSwarm { swarm_id } => {
+            client.post(sidecar_url(handshake.port, &["swarm", &swarm_id, "run"])?)
+        }
+    };
+
+    send_sidecar_request(&handshake.token, request).await
+}
+
+fn take_sse_frame(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
+    let (index, separator_len) = buffer
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| (index, 4))
+        .or_else(|| {
+            buffer
+                .windows(2)
+                .position(|window| window == b"\n\n")
+                .map(|index| (index, 2))
+        })?;
+    let frame = buffer[..index].to_vec();
+    buffer.drain(..index + separator_len);
+    Some(frame)
+}
+
+fn decode_sse_frame(frame: &[u8]) -> Option<serde_json::Value> {
+    let text = std::str::from_utf8(frame).ok()?;
+    let data = text
+        .lines()
+        .filter_map(|line| line.trim_end_matches('\r').strip_prefix("data:"))
+        .map(str::trim_start)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if data.is_empty() {
+        return None;
+    }
+    serde_json::from_str(&data).ok()
+}
+
+#[tauri::command]
+async fn subscribe_voss_events(
+    sidecar_id: String,
+    session_id: String,
+    on_event: tauri::ipc::Channel<SidecarStreamEvent>,
+    sidecars: VossServeMap<'_>,
+    streams: VossStreamMap<'_>,
+) -> Result<String, String> {
+    let (handshake, _) = sidecar_connection(&sidecar_id, sidecars.inner())?;
+    let response = reqwest::Client::new()
+        .get(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "events"],
+        )?)
+        .bearer_auth(&handshake.token)
+        .send()
+        .await
+        .map_err(|_| "sidecar event stream failed".to_string())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "sidecar event stream failed: {}",
+            response.status()
+        ));
+    }
+
+    let stream_id = uuid::Uuid::new_v4().to_string();
+    let task = tauri::async_runtime::spawn(async move {
+        let mut response = response;
+        let mut buffer = Vec::new();
+        loop {
+            match response.chunk().await {
+                Ok(Some(chunk)) => {
+                    buffer.extend_from_slice(&chunk);
+                    if buffer.len() > 1_048_576 {
+                        let _ = on_event.send(SidecarStreamEvent::Error {
+                            message: "sidecar event exceeded limit".to_string(),
+                        });
+                        break;
+                    }
+                    while let Some(frame) = take_sse_frame(&mut buffer) {
+                        if let Some(event) = decode_sse_frame(&frame) {
+                            if on_event.send(SidecarStreamEvent::Event { event }).is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    let _ = on_event.send(SidecarStreamEvent::Error {
+                        message: "sidecar event stream failed".to_string(),
+                    });
+                    break;
+                }
+            }
+        }
+        let _ = on_event.send(SidecarStreamEvent::End);
+    });
+    streams
+        .lock()
+        .map_err(|_| "stream lock poisoned".to_string())?
+        .insert(stream_id.clone(), task);
+    Ok(stream_id)
+}
+
+#[tauri::command]
+fn unsubscribe_voss_events(stream_id: String, streams: VossStreamMap<'_>) -> Result<(), String> {
+    if let Some(task) = streams
+        .lock()
+        .map_err(|_| "stream lock poisoned".to_string())?
+        .remove(&stream_id)
+    {
+        task.abort();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<SidecarHandle, String> {
     // Canonicalize and require an exact persisted project-workspace match before
     // the webview-controlled cwd reaches a process-spawn argument.
     let index = workspaces::load_workspaces_index();
@@ -1490,7 +1855,11 @@ async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeH
     {
         let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
         match map.get(&key) {
-            Some(serve) if serve.pid().is_some() => return Ok(serve.handshake.clone()),
+            Some(entry) if entry.serve.pid().is_some() => {
+                return Ok(SidecarHandle {
+                    sidecar_id: entry.id.clone(),
+                })
+            }
             Some(_) => {
                 map.remove(&key);
             }
@@ -1502,11 +1871,18 @@ async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeH
     let serve = spawn_voss_serve(&python_path(), &canonical)
         .await
         .map_err(|e| e.to_string())?;
-    let handshake = serve.handshake.clone();
+    let sidecar_id = uuid::Uuid::new_v4().to_string();
 
     let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
-    map.insert(key, serve);
-    Ok(handshake)
+    map.insert(
+        key,
+        VossServeEntry {
+            id: sidecar_id.clone(),
+            root: canonical,
+            serve,
+        },
+    );
+    Ok(SidecarHandle { sidecar_id })
 }
 
 // ---- ui_log: webview diagnostics -> dev terminal ---------------------------
@@ -1535,7 +1911,11 @@ pub fn run() {
         .manage(Mutex::new(AgentRegistryMap::new()))
         .manage(SwarmWatchState::default())
         .manage(KeymapWatchState::default())
-        .manage(Mutex::new(HashMap::<String, VossServe>::new()))
+        .manage(Mutex::new(HashMap::<String, VossServeEntry>::new()))
+        .manage(Arc::new(Mutex::new(HashMap::<
+            String,
+            tauri::async_runtime::JoinHandle<()>,
+        >::new())))
         .invoke_handler(tauri::generate_handler![
             get_theme_overrides,
             save_clipboard_image,
@@ -1599,6 +1979,9 @@ pub fn run() {
             enumerate_runs,
             run_decision,
             start_voss_serve,
+            call_voss_sidecar,
+            subscribe_voss_events,
+            unsubscribe_voss_events,
             ui_log,
         ])
         .run(tauri::generate_context!())

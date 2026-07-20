@@ -5220,6 +5220,7 @@ name = "voss-app"
 version = "0.1.0"
 dependencies = [
  "dirs 5.0.1",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
@@ -5227,6 +5228,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-os",
+ "uuid",
  "voss-app-core",
 ]
 
