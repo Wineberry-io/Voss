@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-validate-keymap-overrides"
+description = "Enables the validate_keymap_overrides command without any pre-configured scope."
+commands.allow = ["validate_keymap_overrides"]
+
+[[permission]]
+identifier = "deny-validate-keymap-overrides"
+description = "Denies the validate_keymap_overrides command without any pre-configured scope."
+commands.deny = ["validate_keymap_overrides"]

@@ -1566,8 +1566,7 @@ async fn open_orchestration_console(
     *state
         .context
         .lock()
-        .map_err(|_| "could not open orchestration console".to_string())? =
-        Some(context.clone());
+        .map_err(|_| "could not open orchestration console".to_string())? = Some(context.clone());
 
     if let Some(window) = app.get_webview_window(ORCHESTRATION_WINDOW_LABEL) {
         window
@@ -1592,7 +1591,6 @@ async fn open_orchestration_console(
     .inner_size(1180.0, 760.0)
     .min_inner_size(800.0, 500.0)
     .decorations(false)
-    .transparent(true)
     .build()
     .map_err(|_| "could not open orchestration console".to_string())?;
     Ok(())
@@ -1735,10 +1733,12 @@ async fn send_sidecar_request(
 
 #[tauri::command]
 async fn call_voss_sidecar(
+    window: tauri::WebviewWindow,
     sidecar_id: String,
     operation: SidecarOperation,
     state: VossServeMap<'_>,
 ) -> Result<serde_json::Value, String> {
+    require_orchestration_window(&window)?;
     let (handshake, root) = sidecar_connection(&sidecar_id, state.inner())?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(60))
@@ -1884,12 +1884,14 @@ fn decode_sse_frame(frame: &[u8]) -> Option<serde_json::Value> {
 
 #[tauri::command]
 async fn subscribe_voss_events(
+    window: tauri::WebviewWindow,
     sidecar_id: String,
     session_id: String,
     on_event: tauri::ipc::Channel<SidecarStreamEvent>,
     sidecars: VossServeMap<'_>,
     streams: VossStreamMap<'_>,
 ) -> Result<String, String> {
+    require_orchestration_window(&window)?;
     let (handshake, _) = sidecar_connection(&sidecar_id, sidecars.inner())?;
     let response = reqwest::Client::new()
         .get(sidecar_url(
@@ -1948,7 +1950,12 @@ async fn subscribe_voss_events(
 }
 
 #[tauri::command]
-fn unsubscribe_voss_events(stream_id: String, streams: VossStreamMap<'_>) -> Result<(), String> {
+fn unsubscribe_voss_events(
+    window: tauri::WebviewWindow,
+    stream_id: String,
+    streams: VossStreamMap<'_>,
+) -> Result<(), String> {
+    require_orchestration_window(&window)?;
     if let Some(task) = streams
         .lock()
         .map_err(|_| "stream lock poisoned".to_string())?
@@ -1960,7 +1967,12 @@ fn unsubscribe_voss_events(stream_id: String, streams: VossStreamMap<'_>) -> Res
 }
 
 #[tauri::command]
-async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<SidecarHandle, String> {
+async fn start_voss_serve(
+    window: tauri::WebviewWindow,
+    cwd: String,
+    state: VossServeMap<'_>,
+) -> Result<SidecarHandle, String> {
+    require_orchestration_window(&window)?;
     // Canonicalize and require an exact persisted project-workspace match before
     // the webview-controlled cwd reaches a process-spawn argument.
     let index = workspaces::load_workspaces_index();
@@ -2028,6 +2040,7 @@ pub fn run() {
         .manage(Mutex::new(AgentRegistryMap::new()))
         .manage(SwarmWatchState::default())
         .manage(KeymapWatchState::default())
+        .manage(OrchestrationWindowState::default())
         .manage(Mutex::new(HashMap::<String, VossServeEntry>::new()))
         .manage(Arc::new(Mutex::new(HashMap::<
             String,
@@ -2099,6 +2112,8 @@ pub fn run() {
             call_voss_sidecar,
             subscribe_voss_events,
             unsubscribe_voss_events,
+            open_orchestration_console,
+            get_orchestration_context,
             ui_log,
         ])
         .run(tauri::generate_context!())
