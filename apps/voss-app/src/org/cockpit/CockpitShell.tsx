@@ -40,7 +40,7 @@ import {
 } from '../orgStore';
 import { selectedCardId, setSelectedCardId } from '../selection';
 import type { FollowUpClient } from '../feedbackWritePath';
-import type { VossClient } from '../../../../../sdk/typescript/src/client/rest';
+import type { SidecarVossClient } from '../live/sidecarClient';
 import { liveLabel } from '../live/sseClient';
 import { cardsFromRunData } from '../boardDerive';
 import { reconcileSwarm, type SwarmReconcileResult } from '../swarmReconcile';
@@ -62,7 +62,7 @@ const CockpitShell: Component<{
   /** V15-02: live follow-up write client, forwarded to the CardDrawer. */
   followUpClient?: FollowUpClient;
   /** V15-05: live sidecar client for the sidebar "Server sessions" section. */
-  vossClient?: VossClient;
+  vossClient?: SidecarVossClient;
   /** V15-05: Attach action — App attachSession/openAttachedPane seam. */
   onAttach?: (sessionId: string) => void;
 }> = (props) => {
