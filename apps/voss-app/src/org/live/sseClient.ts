@@ -23,7 +23,7 @@ import { createSignal } from 'solid-js';
 import { ingestEvent } from '../attention/attentionQueue';
 import { ingestSwarmEvent } from './swarmLive';
 import type { AgentEvent } from '../../../../../sdk/typescript/src/client/sse';
-import { subscribeToEvents } from '../../../../../sdk/typescript/src/client/sse';
+import { subscribeSidecarEvents } from './sidecarClient';
 
 // --- Live overlay (session-keyed) --------------------------------------------
 
@@ -193,9 +193,8 @@ function applyOverlay(ev: AgentEvent): void {
 // --- connectLiveStream --------------------------------------------------------
 
 export interface ConnectLiveStreamArgs {
-  baseUrl: string;
+  sidecarId?: string;
   sessionId: string;
-  token: string;
   /**
    * The card bound to this stream (Bridge A: the native session id IS the
    * cardId). Threaded into ingestEvent so permission.updated rows carry a
@@ -238,7 +237,11 @@ export function connectLiveStream(args: ConnectLiveStreamArgs): LiveStreamHandle
   const ac = new AbortController();
   const stream =
     args.stream ??
-    subscribeToEvents(args.baseUrl, args.sessionId, args.token, ac.signal);
+    subscribeSidecarEvents(
+      args.sidecarId ?? '',
+      args.sessionId,
+      ac.signal,
+    );
 
   setLiveLabel('live');
   setLiveHandles((prev) => new Set([...prev, args.sessionId]));

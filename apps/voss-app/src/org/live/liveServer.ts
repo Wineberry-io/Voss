@@ -13,8 +13,7 @@ export interface FollowUpLike {
 }
 
 export interface LiveServer {
-  baseUrl: string;
-  token: string;
+  sidecarId: string;
   /** Workspace cwd — needed to discover the active swarm from the agent registry. */
   cwd?: string | null;
   followUpClient?: FollowUpLike;

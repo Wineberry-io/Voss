@@ -98,7 +98,7 @@ const SwarmMap: Component = () => {
       const id = activeSwarmId() ?? (await discoverActiveSwarmId(k.srv.cwd ?? null));
       if (!id) return null;
       try {
-        return await fetchSwarm(k.srv.baseUrl, k.srv.token, id);
+        return await fetchSwarm(k.srv.sidecarId, id);
       } catch {
         return null;
       }
