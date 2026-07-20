@@ -1,5 +1,5 @@
-//! A6 session persistence — versioned `session.json` / `global-session.json`,
-//! locked writes, and fail-safe loads.
+//! A6 session persistence — private per-workspace session files, locked writes,
+//! fail-safe loads, and copy-only migration from legacy repo-local state.
 //!
 //! Follows the `layouts.rs` pattern: a versioned wrapper around `GridState`
 //! with typed errors whose Display strings surface through Tauri verbatim.
@@ -75,8 +75,13 @@ pub enum SessionError {
 
 // --- Path resolution ---------------------------------------------------------
 
-/// `<workspace>/.voss/session.json`
-pub fn session_path(workspace: &Path) -> PathBuf {
+/// `~/.config/voss-app/sessions/<workspace_id>.json`.
+pub fn session_path(workspace_id: &str) -> PathBuf {
+    project_less_sessions_dir().join(format!("{workspace_id}.json"))
+}
+
+/// Legacy `<workspace>/.voss/session.json`, read only during migration.
+pub fn legacy_session_path(workspace: &Path) -> PathBuf {
     workspace.join(".voss").join("session.json")
 }
 
@@ -97,7 +102,7 @@ pub fn global_session_path() -> PathBuf {
 
 /// `~/.config/voss-app/sessions/<workspace_id>.json` (D-04 project-less workspaces).
 pub fn project_less_session_path(workspace_id: &str) -> PathBuf {
-    project_less_sessions_dir().join(format!("{workspace_id}.json"))
+    session_path(workspace_id)
 }
 
 #[cfg(not(test))]
@@ -124,9 +129,13 @@ fn config_voss_app_dir() -> PathBuf {
 
 // --- Save / Load -------------------------------------------------------------
 
-/// Save a project session to `<workspace>/.voss/session.json`.
-pub fn save_session(workspace: &Path, session: &SessionFile) -> Result<(), SessionError> {
-    let path = session_path(workspace);
+/// Save a workspace session to private app data.
+pub fn save_session(workspace_id: &str, session: &SessionFile) -> Result<(), SessionError> {
+    if !is_filename_safe_workspace_id(workspace_id) {
+        eprintln!("[voss-app] invalid session workspace id");
+        return Err(SessionError::SaveFailed);
+    }
+    let path = session_path(workspace_id);
     let json = serde_json::to_string_pretty(session).map_err(|e| {
         eprintln!("[voss-app] session serialize failed: {e}");
         SessionError::SaveFailed
@@ -134,10 +143,30 @@ pub fn save_session(workspace: &Path, session: &SessionFile) -> Result<(), Sessi
     locked_write(&path, &json)
 }
 
-/// Load a project session. Returns `Ok(None)` for missing, corrupt, or
-/// unsupported files — never crashes startup (D-11).
-pub fn load_session(workspace: &Path) -> Result<Option<SessionFile>, SessionError> {
-    fail_safe_load(&session_path(workspace))
+/// Load a workspace session from private app data. When private state is absent,
+/// a valid legacy repo-local session is copied into private storage without
+/// modifying or deleting the legacy file.
+pub fn load_session(
+    workspace_id: &str,
+    legacy_workspace: Option<&Path>,
+) -> Result<Option<SessionFile>, SessionError> {
+    if !is_filename_safe_workspace_id(workspace_id) {
+        eprintln!("[voss-app] invalid session workspace id");
+        return Ok(None);
+    }
+    let private_path = session_path(workspace_id);
+    if private_path.exists() {
+        return fail_safe_load(&private_path);
+    }
+    let Some(legacy_workspace) = legacy_workspace else {
+        return Ok(None);
+    };
+    let legacy_path = legacy_session_path(legacy_workspace);
+    let Some(session) = fail_safe_load(&legacy_path)? else {
+        return Ok(None);
+    };
+    save_session(workspace_id, &session)?;
+    Ok(Some(session))
 }
 
 /// Save the global (project-less) session to
@@ -167,7 +196,7 @@ pub fn save_project_less_session(
         eprintln!("[voss-app] invalid project-less session workspace id");
         return Err(SessionError::SaveFailed);
     }
-    let path = project_less_session_path(workspace_id);
+    let path = session_path(workspace_id);
     let json = serde_json::to_string_pretty(session).map_err(|e| {
         eprintln!("[voss-app] project-less session serialize failed: {e}");
         SessionError::SaveFailed
@@ -182,7 +211,7 @@ pub fn load_project_less_session(workspace_id: &str) -> Result<Option<SessionFil
         eprintln!("[voss-app] invalid project-less session workspace id");
         return Ok(None);
     }
-    fail_safe_load(&project_less_session_path(workspace_id))
+    fail_safe_load(&session_path(workspace_id))
 }
 
 /// Workspace ids used in session filenames: alphanumeric + hyphen only.
@@ -403,9 +432,10 @@ mod tests {
     // --- Task 2: file I/O ------------------------------------------------
 
     #[test]
-    fn session_path_resolves_to_workspace_voss_session_json() {
-        let p = session_path(Path::new("/ws"));
-        assert_eq!(p, PathBuf::from("/ws/.voss/session.json"));
+    fn session_path_resolves_under_private_app_data() {
+        let _state = isolate_project_less();
+        let p = session_path("ws-1");
+        assert!(p.to_string_lossy().ends_with("sessions/ws-1.json"));
     }
 
     #[test]
@@ -420,61 +450,55 @@ mod tests {
 
     #[test]
     fn save_then_load_round_trips_project_session() {
-        let dir = tempdir().unwrap();
+        let _state = isolate_project_less();
         let session = sample_session();
-        save_session(dir.path(), &session).unwrap();
-        let loaded = load_session(dir.path()).unwrap();
+        save_session("ws-1", &session).unwrap();
+        let loaded = load_session("ws-1", None).unwrap();
         assert_eq!(loaded, Some(session));
     }
 
     #[test]
-    fn save_lazily_creates_voss_only_on_write() {
-        let dir = tempdir().unwrap();
-        let voss = dir.path().join(".voss");
-        assert!(!voss.exists(), "precondition: .voss must not pre-exist");
-
-        // Load must not create .voss
-        assert!(load_session(dir.path()).unwrap().is_none());
-        assert!(!voss.exists(), ".voss must remain absent before save");
-
-        save_session(dir.path(), &sample_session()).unwrap();
-        assert!(voss.join("session.json").exists());
+    fn save_never_creates_repository_voss_state() {
+        let _state = isolate_project_less();
+        let workspace = tempdir().unwrap();
+        save_session("ws-1", &sample_session()).unwrap();
+        assert!(session_path("ws-1").exists());
+        assert!(!workspace.path().join(".voss").exists());
     }
 
     #[test]
     fn load_session_does_not_create_directories() {
-        let dir = tempdir().unwrap();
-        let voss = dir.path().join(".voss");
-        let _ = load_session(dir.path());
-        assert!(!voss.exists());
+        let state = isolate_project_less();
+        let _ = load_session("missing", None);
+        assert!(!state.path().join("sessions").exists());
     }
 
     #[test]
     fn load_session_returns_none_for_missing_file() {
-        let dir = tempdir().unwrap();
-        assert!(load_session(dir.path()).unwrap().is_none());
+        let _state = isolate_project_less();
+        assert!(load_session("missing", None).unwrap().is_none());
     }
 
     #[test]
     fn load_session_returns_none_for_corrupt_json() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join(".voss");
-        std::fs::create_dir_all(&path).unwrap();
-        std::fs::write(path.join("session.json"), "not json").unwrap();
-        assert!(load_session(dir.path()).unwrap().is_none());
+        let _state = isolate_project_less();
+        let path = session_path("bad");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "not json").unwrap();
+        assert!(load_session("bad", None).unwrap().is_none());
     }
 
     #[test]
     fn load_session_returns_none_for_unsupported_version() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join(".voss");
-        std::fs::create_dir_all(&path).unwrap();
+        let _state = isolate_project_less();
+        let path = session_path("future");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
-            path.join("session.json"),
+            path,
             r#"{"version":999,"activePreset":null,"grid":{},"panes":[],"projectLessAccepted":false}"#,
         )
         .unwrap();
-        assert!(load_session(dir.path()).unwrap().is_none());
+        assert!(load_session("future", None).unwrap().is_none());
     }
 
     #[test]
@@ -494,26 +518,41 @@ mod tests {
 
     #[test]
     fn save_writes_tmp_then_renames() {
-        let dir = tempdir().unwrap();
-        save_session(dir.path(), &sample_session()).unwrap();
-        let session_path = dir.path().join(".voss").join("session.json");
-        let tmp_path = dir.path().join(".voss").join("session.json.tmp");
-        assert!(session_path.exists());
+        let _state = isolate_project_less();
+        save_session("ws-1", &sample_session()).unwrap();
+        let path = session_path("ws-1");
+        let tmp_path = path.with_extension("json.tmp");
+        assert!(path.exists());
         assert!(!tmp_path.exists(), "tmp must be cleaned up by rename");
     }
 
     #[test]
     fn save_overwrites_existing_session() {
-        let dir = tempdir().unwrap();
+        let _state = isolate_project_less();
         let first = SessionFile::new(sample_grid(), Some("fanout".into()), vec![], false);
-        save_session(dir.path(), &first).unwrap();
+        save_session("ws-1", &first).unwrap();
 
         let second = SessionFile::new(sample_grid(), Some("pipeline".into()), vec![], true);
-        save_session(dir.path(), &second).unwrap();
+        save_session("ws-1", &second).unwrap();
 
-        let loaded = load_session(dir.path()).unwrap().unwrap();
+        let loaded = load_session("ws-1", None).unwrap().unwrap();
         assert_eq!(loaded.active_preset, Some("pipeline".into()));
         assert!(loaded.project_less_accepted);
+    }
+
+    #[test]
+    fn legacy_project_session_is_copied_without_modifying_repository() {
+        let _state = isolate_project_less();
+        let workspace = tempdir().unwrap();
+        let legacy = legacy_session_path(workspace.path());
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        let json = serde_json::to_string_pretty(&sample_session()).unwrap();
+        std::fs::write(&legacy, &json).unwrap();
+
+        let loaded = load_session("ws-1", Some(workspace.path())).unwrap();
+        assert_eq!(loaded, Some(sample_session()));
+        assert_eq!(std::fs::read_to_string(&legacy).unwrap(), json);
+        assert!(session_path("ws-1").exists());
     }
 
     // --- Project-less per-workspace sessions (A8 D-04) ---------------------

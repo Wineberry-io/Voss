@@ -834,8 +834,10 @@ Closed in the first containment slice:
 - candidate events now flow through Python contracts, the generated Rust SDK, server SSE adaptation, and the Solid live store.
 - sidecar bearer tokens, loopback ports, base URLs, and canonical roots now remain in Rust; JavaScript receives only an opaque sidecar ID and uses an allowlisted operation proxy plus Tauri-channel SSE forwarding;
 - the production CSP no longer permits arbitrary localhost ports or direct Anthropic connections from the webview.
+- every registered application command is now opt-in through Tauri's generated command manifest; the `main` terminal window has no Voss sidecar or run-review permissions, while the separate optional `orchestration` window has no PTY or agent-process-spawn permissions;
+- Review, Orchestra, Memory, and Ask Voss entry points open the orchestration window explicitly; Voss sidecar commands also enforce the invoking window label in Rust, and Review derives its canonical workspace root from Rust-held console context rather than renderer-supplied paths.
 
-Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, command-level Tauri permissions, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. The opaque sidecar proxy removes raw credentials, arbitrary endpoints, and caller-supplied roots from JavaScript, but a compromised main webview can still invoke the legitimate operations granted to that window until command permissions are split by capability/surface.
+Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. The terminal and orchestration renderers now have separate command authority; remaining privileged commands still require their own argument validation and opaque-handle migration as their surrounding P0 work lands.
 
 ### Phase 1: Extract engine boundaries and prove tmux
 

@@ -1,12 +1,9 @@
 import {
   For,
-  Show,
-  createEffect,
   createSignal,
   onCleanup,
   onMount,
 } from 'solid-js';
-import { listLayouts } from '../../grid/layoutStorage';
 import { pickFolder } from '../../project/projectStorage';
 import {
   COPY_NEW_WORKSPACE,
@@ -21,7 +18,6 @@ export const COPY_START_EMPTY = 'Start empty';
 export const COPY_CREATE_WORKSPACE = 'Create workspace';
 export const COPY_WORKSPACE_NAME_PLACEHOLDER = 'workspace name';
 export const COPY_SHELL_LABEL = 'Shell';
-export const COPY_LAYOUT_LABEL = 'Layout';
 export const COPY_UNTITLED_WORKSPACE = 'Untitled workspace';
 
 export type NewWorkspacePickerCreatePayload = {
@@ -64,32 +60,12 @@ export default function NewWorkspacePicker(props: NewWorkspacePickerProps) {
   const [name, setName] = createSignal(COPY_UNTITLED_WORKSPACE);
   const [folderPath, setFolderPath] = createSignal<string | null>(null);
   const [accentColor, setAccentColor] = createSignal<WorkspaceAccentColor>('blue');
-  const [layoutNames, setLayoutNames] = createSignal<string[]>([]);
-  const [selectedLayout, setSelectedLayout] = createSignal<string>('');
   const [openingFolder, setOpeningFolder] = createSignal(false);
 
   const shellLabel = () => props.defaultShell ?? '/bin/zsh';
   const trimmedName = () => name().trim();
   const canCreate = () => trimmedName().length > 0 && folderPath() !== null;
   const canStartEmpty = () => trimmedName().length > 0;
-
-  createEffect(() => {
-    const path = folderPath();
-    if (!path) {
-      setLayoutNames([]);
-      setSelectedLayout('');
-      return;
-    }
-    void listLayouts(path)
-      .then((names) => {
-        setLayoutNames(names);
-        setSelectedLayout(names[0] ?? '');
-      })
-      .catch(() => {
-        setLayoutNames([]);
-        setSelectedLayout('');
-      });
-  });
 
   const dismiss = () => props.onDismiss();
 
@@ -99,7 +75,7 @@ export default function NewWorkspacePicker(props: NewWorkspacePickerProps) {
       name: trimmedName(),
       accentColor: accentColor(),
       folderPath: folderPath(),
-      layoutName: selectedLayout() || null,
+      layoutName: null,
     });
   };
 
@@ -220,30 +196,6 @@ export default function NewWorkspacePicker(props: NewWorkspacePickerProps) {
               {shellLabel()}
             </span>
           </div>
-
-          <Show when={folderPath()}>
-            <label class="new-workspace-picker__row">
-              <span class="new-workspace-picker__label">{COPY_LAYOUT_LABEL}</span>
-              <select
-                class="new-workspace-picker__select"
-                data-new-workspace-layout=""
-                value={selectedLayout()}
-                onChange={(e) => setSelectedLayout(e.currentTarget.value)}
-                disabled={layoutNames().length === 0}
-              >
-                <Show
-                  when={layoutNames().length > 0}
-                  fallback={<option value="">—</option>}
-                >
-                  <For each={layoutNames()}>
-                    {(layoutName) => (
-                      <option value={layoutName}>{layoutName}</option>
-                    )}
-                  </For>
-                </Show>
-              </select>
-            </label>
-          </Show>
 
           <div class="new-workspace-picker__colors">
             <For each={[...WORKSPACE_ACCENT_COLORS]}>

@@ -42,26 +42,26 @@ export const LOAD_FAILED = 'could not load layout';
 // --- Tauri command bridges -------------------------------------------------
 
 export async function saveLayout(
-  workspacePath: string,
+  workspaceId: string,
   name: string,
   layout: LayoutFile,
 ): Promise<void> {
-  await invoke('save_layout', { workspacePath, name, layout });
+  await invoke('save_layout', { workspaceId, name, layout });
 }
 
 export async function loadLayout(
-  workspacePath: string,
+  workspaceId: string,
   name: string,
 ): Promise<LayoutFile> {
-  return invoke<LayoutFile>('load_layout', { workspacePath, name });
+  return invoke<LayoutFile>('load_layout', { workspaceId, name });
 }
 
-export async function listLayouts(workspacePath: string): Promise<string[]> {
-  return invoke<string[]>('list_layouts', { workspacePath });
+export async function listLayouts(workspaceId: string): Promise<string[]> {
+  return invoke<string[]>('list_layouts', { workspaceId });
 }
 
 export async function loadDefaultLayout(
-  workspacePath: string,
+  workspaceId: string,
 ): Promise<LayoutFile | null> {
-  return invoke<LayoutFile | null>('load_default_layout', { workspacePath });
+  return invoke<LayoutFile | null>('load_default_layout', { workspaceId });
 }

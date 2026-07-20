@@ -51,6 +51,7 @@ import {
 
 function makeCtx(projectPath: string | null = '/ws'): SessionContext {
   return {
+    workspaceId: 'ws-1',
     getRoot: () => ({
       kind: 'pane',
       id: 'a',

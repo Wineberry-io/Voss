@@ -947,7 +947,7 @@ export default function App() {
   };
 
   const saveCurrentLayout = async (
-    path: string,
+    workspaceId: string,
     name: string,
   ): Promise<void> => {
     const ctrl = gridController();
@@ -955,16 +955,16 @@ export default function App() {
     if (!ctrl || !ws) return;
     const snap = ctrl.snapshot();
     const file = serializeLayout(snap.root, snap.focusedId, ws.activeLayout());
-    await saveLayout(path, name, file);
+    await saveLayout(workspaceId, name, file);
   };
 
   const loadLayoutByName = async (
-    path: string,
+    workspaceId: string,
     name: string,
   ): Promise<void> => {
     const ctrl = gridController();
     if (!ctrl) return;
-    const file = await loadLayout(path, name);
+    const file = await loadLayout(workspaceId, name);
     ctrl.applyLoadedLayout(file);
   };
 
@@ -977,9 +977,9 @@ export default function App() {
         const info = await openProject(record.projectPath);
         const agentConfigs = await fetchAgentConfigs(info.path);
         let session: SessionFile | null = null;
-        session = await loadSession(info.path).catch(() => null);
+        session = await loadSession(record.id).catch(() => null);
         if (!session) {
-          const layout = await loadDefaultLayout(info.path).catch(() => null);
+          const layout = await loadDefaultLayout(record.id).catch(() => null);
           if (layout) {
             session = layoutToSession(layout, false);
           }
@@ -1029,17 +1029,17 @@ export default function App() {
       setRecents(await listRecents());
       const agentConfigs = await fetchAgentConfigs(info.path);
 
-      let session: SessionFile | null = await loadSession(info.path).catch(
+      let session: SessionFile | null = await loadSession(workspaceId).catch(
         () => null,
       );
       if (!session && layoutName) {
-        const layout = await loadLayout(info.path, layoutName).catch(() => null);
+        const layout = await loadLayout(workspaceId, layoutName).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
       }
       if (!session) {
-        const layout = await loadDefaultLayout(info.path).catch(() => null);
+        const layout = await loadDefaultLayout(workspaceId).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
@@ -1072,10 +1072,13 @@ export default function App() {
       const info = await openProject(path);
       setRecents(await listRecents());
 
+      workspaceStore.setProjectPath(ws.id, info.path);
+      await workspaceStore.persist();
+
       let session: SessionFile | null = null;
-      session = await loadSession(info.path).catch(() => null);
+      session = await loadSession(ws.id).catch(() => null);
       if (!session) {
-        const layout = await loadDefaultLayout(info.path).catch(() => null);
+        const layout = await loadDefaultLayout(ws.id).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
@@ -1094,7 +1097,6 @@ export default function App() {
         ws.setProjectLessAccepted(true);
         ws.setEverMounted(true);
       });
-      workspaceStore.setProjectPath(ws.id, info.path);
       void installWorkspaceKeymap(info.path);
     } catch (e) {
       console.error(errorPrefix, e);
@@ -1142,6 +1144,7 @@ export default function App() {
       accentColor: payload.accentColor,
     });
     const ws = ensureMountedRecord(record.id);
+    await workspaceStore.persist();
     if (payload.folderPath) {
       await bootstrapWorkspaceProject(
         ws,
@@ -1150,7 +1153,6 @@ export default function App() {
         payload.layoutName,
       );
     }
-    void workspaceStore.persist();
   };
 
   const handleStartEmptyWorkspace = async (
@@ -1283,9 +1285,9 @@ export default function App() {
 
   const openPalette = (mode: 'quick' | 'full') => {
     setPaletteMode(mode);
-    const path = workspacePath();
-    if (mode === 'quick' && path) {
-      void listLayouts(path)
+    const id = activeId();
+    if (mode === 'quick' && id && activeMounted()?.project()) {
+      void listLayouts(id)
         .then(setLayoutNames)
         .catch(() => setLayoutNames([]));
     }
@@ -1299,10 +1301,10 @@ export default function App() {
   const handlePaletteExecute = (id: string) => {
     if (id.startsWith('layout:')) {
       const name = id.slice('layout:'.length);
-      const path = workspacePath();
+      const workspaceId = activeId();
       const ctrl = gridController();
-      if (path && ctrl) {
-        void loadLayoutByName(path, name);
+      if (workspaceId && ctrl) {
+        void loadLayoutByName(workspaceId, name);
       }
     } else if (id.startsWith('recent:')) {
       const path = id.slice('recent:'.length);
@@ -1350,13 +1352,13 @@ export default function App() {
     openFullPalette: () => openPalette('full'),
     openProject: () => void handleOpenFolder(),
     saveLayout: () => {
-      const path = workspacePath();
-      if (!path) return;
+      const id = activeId();
+      if (!id || !activeMounted()?.project()) return;
       const name = window.prompt('Save layout as');
       const trimmed = name?.trim();
       if (!trimmed) return;
-      void saveCurrentLayout(path, trimmed)
-        .then(() => listLayouts(path))
+      void saveCurrentLayout(id, trimmed)
+        .then(() => listLayouts(id))
         .then(setLayoutNames)
         .catch((e) => console.error('save_layout failed:', e));
     },

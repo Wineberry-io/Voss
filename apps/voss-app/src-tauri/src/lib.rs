@@ -910,31 +910,34 @@ fn get_grid(state: GridSlot<'_>) -> Result<GridState, String> {
 // `generate_handler!` constraint as the PTY and grid commands above — the
 // core's own `#[tauri::command]` macros are not in scope here.
 //
-// `workspace_path` is the absolute path to the open project root; the
-// frontend resolves it via the A5 project-open seam (until A5 lands the
-// frontend passes the CWD of the focused pane or the user's home).
+// Private layouts are keyed by the registered workspace UUID. The project path
+// is derived in Rust and used only for copy-only legacy migration.
 // Errors propagate as `LayoutError`'s Display strings — those match the
 // A4-UI-SPEC error copy exactly, so the renderer can surface them
 // verbatim.
 
 #[tauri::command]
-fn save_layout(workspace_path: String, name: String, layout: LayoutFile) -> Result<(), String> {
-    layouts::save_layout(Path::new(&workspace_path), &name, &layout).map_err(|e| e.to_string())
+fn save_layout(workspace_id: String, name: String, layout: LayoutFile) -> Result<(), String> {
+    let _ = registered_project_path(&workspace_id)?;
+    layouts::save_layout(&workspace_id, &name, &layout).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn load_layout(workspace_path: String, name: String) -> Result<LayoutFile, String> {
-    layouts::load_layout(Path::new(&workspace_path), &name).map_err(|e| e.to_string())
+fn load_layout(workspace_id: String, name: String) -> Result<LayoutFile, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::load_layout(&workspace_id, Some(&legacy_project), &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn list_layouts(workspace_path: String) -> Result<Vec<String>, String> {
-    layouts::list_layouts(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn list_layouts(workspace_id: String) -> Result<Vec<String>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::list_layouts(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn load_default_layout(workspace_path: String) -> Result<Option<LayoutFile>, String> {
-    layouts::load_default_layout(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn load_default_layout(workspace_id: String) -> Result<Option<LayoutFile>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::load_default_layout(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 // ---- Context pin commands (F4-04) -------------------------------------------
@@ -1063,17 +1066,29 @@ fn default_cwd(project_path: Option<String>) -> String {
 // ---- Session persistence commands (A6-01) -----------------------------------
 // Thin app-level wrappers over `voss_app_core::session`. Same cross-crate
 // `generate_handler!` constraint as the PTY, grid, layout, and project
-// commands above. Project commands take `workspace_path`; global commands
-// take no path argument.
+// commands above. Project sessions are keyed by the registered workspace UUID;
+// repository paths are used only for copy-only legacy migration.
 
-#[tauri::command]
-fn save_session(workspace_path: String, session: SessionFile) -> Result<(), String> {
-    session::save_session(Path::new(&workspace_path), &session).map_err(|e| e.to_string())
+fn registered_project_path(workspace_id: &str) -> Result<PathBuf, String> {
+    workspaces::load_workspaces_index()
+        .workspaces
+        .into_iter()
+        .find(|workspace| workspace.id == workspace_id)
+        .and_then(|workspace| workspace.project_path)
+        .map(PathBuf::from)
+        .ok_or_else(|| "workspace is not a registered project".to_string())
 }
 
 #[tauri::command]
-fn load_session(workspace_path: String) -> Result<Option<SessionFile>, String> {
-    session::load_session(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn save_session(workspace_id: String, session: SessionFile) -> Result<(), String> {
+    let _ = registered_project_path(&workspace_id)?;
+    session::save_session(&workspace_id, &session).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_session(workspace_id: String) -> Result<Option<SessionFile>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    session::load_session(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
