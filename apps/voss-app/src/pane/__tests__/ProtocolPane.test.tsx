@@ -55,8 +55,7 @@ function mount(
     () => (
       <ProtocolPane
         sessionId={sessionId}
-        baseUrl="http://localhost:0"
-        token="tok"
+        sidecarId="test-sidecar"
         stream={stream}
       />
     ),
@@ -404,7 +403,7 @@ describe('ProtocolPane — lifecycle states (V15-04, VLIVE-07)', () => {
   });
 
   it('a stream that ends with zero events shows the D-12 spawn error; Retry re-invokes startVossServe', async () => {
-    mockStartServe.mockResolvedValueOnce({ port: 50099, token: 'tok-2' });
+    mockStartServe.mockResolvedValueOnce({ sidecarId: 'test-sidecar-2' });
     const c = mount(scripted([]));
     await flush();
     await flush();
@@ -435,8 +434,7 @@ describe('ProtocolPane — lifecycle states (V15-04, VLIVE-07)', () => {
       () => (
         <ProtocolPane
           sessionId="sess-1"
-          baseUrl="http://localhost:0"
-          token="tok"
+          sidecarId="test-sidecar"
           onEnded={onEnded}
           stream={scripted([ev({ type: 'user', task: 'go' })])}
         />

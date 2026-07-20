@@ -7,10 +7,9 @@ const runSwarm = vi.fn().mockResolvedValue(undefined);
 const connectLiveStream = vi.fn((_args?: unknown) => ({ abort: vi.fn() }));
 
 vi.mock('../swarmClient', () => ({
-  createSwarm: (baseUrl: string, token: string, body: unknown) =>
-    createSwarm(baseUrl, token, body),
-  runSwarm: (baseUrl: string, token: string, id: string) =>
-    runSwarm(baseUrl, token, id),
+  createSwarm: (sidecarId: string, body: unknown) =>
+    createSwarm(sidecarId, body),
+  runSwarm: (sidecarId: string, id: string) => runSwarm(sidecarId, id),
 }));
 vi.mock('../sseClient', () => ({
   connectLiveStream: (args: unknown) => connectLiveStream(args),
@@ -38,7 +37,7 @@ describe('launchSwarm', () => {
       ],
     });
     const postMessage = vi.fn().mockResolvedValue(undefined);
-    const srv = { baseUrl: 'http://x', token: 't', cwd: '/repo', followUpClient: { postMessage } };
+    const srv = { sidecarId: 'test-sidecar', cwd: '/repo', followUpClient: { postMessage } };
 
     const id = await launchSwarm(srv, { goal: 'ship it', builders: 2 });
 
@@ -69,7 +68,7 @@ describe('launchSwarm', () => {
       { name: 'coordinator', agent: 'voss', model: 'default' },
       { name: 'builder-1', agent: 'voss', model: 'default' },
     ];
-    const srv = { baseUrl: 'http://x', token: 't', cwd: '/repo' };
+    const srv = { sidecarId: 'test-sidecar', cwd: '/repo' };
 
     await launchSwarm(srv, { goal: 'go', builders: 1, roster });
 
@@ -85,7 +84,7 @@ describe('launchSwarm', () => {
 
   it('propagates a creation failure (e.g. no credentials)', async () => {
     createSwarm.mockRejectedValue(new Error('POST /swarm failed: 400'));
-    const srv = { baseUrl: 'http://x', token: 't', cwd: '/repo' };
+    const srv = { sidecarId: 'test-sidecar', cwd: '/repo' };
     await expect(launchSwarm(srv, { goal: 'g', builders: 2 })).rejects.toThrow(/400/);
     expect(activeSwarmId()).toBeNull();
   });

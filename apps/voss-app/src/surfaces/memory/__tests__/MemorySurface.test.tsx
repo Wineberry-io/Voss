@@ -37,7 +37,7 @@ describe('MemorySurface', () => {
     expect(fetchMemoryMock).not.toHaveBeenCalled();
   });
 
-  it('loads the summary from the server when baseUrl/token/cwd are present', async () => {
+  it('loads the summary when an opaque sidecar handle is present', async () => {
     fetchMemoryMock.mockResolvedValue({
       v: 1,
       summary: '# Memory\n5 files',
@@ -46,7 +46,7 @@ describe('MemorySurface', () => {
     });
 
     const el = mount(() => (
-      <MemorySurface baseUrl="http://127.0.0.1:5001" token="tok" cwd="/repo" />
+      <MemorySurface sidecarId="test-sidecar" />
     ));
     await flush();
 
@@ -80,7 +80,7 @@ describe('MemorySurface', () => {
     });
 
     const el = mount(() => (
-      <MemorySurface baseUrl="http://127.0.0.1:5001" token="tok" cwd="/repo" />
+      <MemorySurface sidecarId="test-sidecar" />
     ));
     await flush();
 

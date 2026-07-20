@@ -98,7 +98,7 @@ export async function createSwarm(
     goal: body.goal,
     builders: body.builders ?? 2,
     ...(body.roster && body.roster.length > 0
-      ? { roster: body.roster as Array<Record<string, unknown>> }
+      ? { roster: body.roster as unknown as Array<Record<string, unknown>> }
       : {}),
   });
   return { id: out.id, sessions: out.sessions ?? [] };
