@@ -31,7 +31,7 @@ export async function loadRun(
   setCurrentCwd(cwd);
   setCurrentCliBinary(cliBinary);
   try {
-    const raw = await invoke<RunData>('load_run', { runId, cwd, cliBinary });
+    const raw = await invoke<RunData>('load_run', { runId });
     // Boundary validation: drift → explicit error (D-02).
     const data = assertRunData(raw);
     setRunData(data);
@@ -44,8 +44,8 @@ export async function loadRun(
 }
 
 /** Discover V4+ runs, newest first (D-03). */
-export async function enumerateRuns(cwd: string): Promise<RunEntry[]> {
-  const entries = await invoke<RunEntry[]>('enumerate_runs', { cwd });
+export async function enumerateRuns(_cwd: string): Promise<RunEntry[]> {
+  const entries = await invoke<RunEntry[]>('enumerate_runs');
   setRunEntries(entries);
   return entries;
 }

@@ -420,9 +420,11 @@ async fn spawn_managed_agent(
 mod tests {
     use super::{
         authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
-        decode_sse_frame, ensure_registry, env_for_embedded_cli, is_interactive_voss_command,
-        sidecar_url, take_sse_frame, SidecarHandle,
+        command_manifest, decode_sse_frame, ensure_registry, env_for_embedded_cli,
+        is_interactive_voss_command, normalize_orchestration_view, sidecar_url, take_sse_frame,
+        SidecarHandle,
     };
+    use std::collections::HashSet;
     use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
 
     fn workspace_index(project_path: Option<String>) -> WorkspacesIndex {
@@ -495,6 +497,72 @@ mod tests {
             serde_json::json!("thinking")
         );
         assert!(take_sse_frame(&mut buffer).is_none());
+    }
+
+    fn capability_commands(raw: &str) -> HashSet<String> {
+        serde_json::from_str::<serde_json::Value>(raw).unwrap()["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|permission| permission.as_str())
+            .filter_map(|permission| permission.strip_prefix("allow-"))
+            .map(|permission| permission.replace('-', "_"))
+            .collect()
+    }
+
+    #[test]
+    fn app_manifest_covers_every_registered_command() {
+        let source = include_str!("lib.rs");
+        let handler = source
+            .rsplit_once(".invoke_handler(tauri::generate_handler![")
+            .unwrap()
+            .1
+            .split_once("])")
+            .unwrap()
+            .0;
+        let registered: HashSet<&str> = handler
+            .split(',')
+            .map(str::trim)
+            .filter(|command| !command.is_empty())
+            .collect();
+        let manifest: HashSet<&str> = command_manifest::APP_COMMANDS.iter().copied().collect();
+        assert_eq!(registered, manifest);
+    }
+
+    #[test]
+    fn capability_files_match_the_reviewed_command_sets() {
+        let main = capability_commands(include_str!("../capabilities/default.json"));
+        let orchestration = capability_commands(include_str!("../capabilities/orchestration.json"));
+        assert_eq!(
+            main,
+            command_manifest::MAIN_COMMANDS
+                .iter()
+                .map(|command| (*command).to_string())
+                .collect()
+        );
+        assert_eq!(
+            orchestration,
+            command_manifest::ORCHESTRATION_COMMANDS
+                .iter()
+                .map(|command| (*command).to_string())
+                .collect()
+        );
+        assert!(!main.contains("start_voss_serve"));
+        assert!(!main.contains("call_voss_sidecar"));
+        assert!(!orchestration.contains("spawn_pty"));
+        assert!(!orchestration.contains("spawn_agent"));
+    }
+
+    #[test]
+    fn orchestration_view_allowlist_rejects_unknown_surfaces() {
+        assert_eq!(
+            normalize_orchestration_view(Some("memory".to_string())),
+            "memory"
+        );
+        assert_eq!(
+            normalize_orchestration_view(Some("settings".to_string())),
+            "review"
+        );
     }
 
     /// VBUS-03 camelCase IPC round-trip guard (V14 AgentEntry lesson): a
@@ -649,7 +717,7 @@ mod tests {
         // Legacy flat SessionRecord (Pitfall 1) — must be excluded.
         fs::write(sessions.join("legacyflat999.json"), "{}").unwrap();
 
-        let runs = super::enumerate_runs(base.to_string_lossy().into_owned());
+        let runs = super::enumerate_runs_impl(base.to_string_lossy().into_owned());
         let ids: Vec<String> = runs.iter().map(|r| r.run_id.clone()).collect();
         assert_eq!(ids, vec!["abc123run456".to_string()]);
 
@@ -658,7 +726,7 @@ mod tests {
 
     #[test]
     fn load_run_rejects_traversal() {
-        let res = super::load_run("../etc".into(), "/tmp".into(), "voss".into());
+        let res = super::load_run_impl("../etc".into(), "/tmp".into(), "voss".into());
         assert!(res.is_err());
     }
 
@@ -673,7 +741,7 @@ mod tests {
         fs::write(&fake, "#!/bin/sh\nexit 3\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
 
-        let res = super::run_decision(
+        let res = super::run_decision_impl(
             fake.to_string_lossy().into_owned(),
             base.to_string_lossy().into_owned(),
             vec!["audit".into(), "deadbeef1234".into(), "--approve".into()],
@@ -1366,8 +1434,7 @@ fn sessions_dir(cwd: &str) -> PathBuf {
     Path::new(cwd).join(".voss").join("sessions")
 }
 
-#[tauri::command]
-fn load_run(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, String> {
+fn load_run_impl(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, String> {
     // Path traversal guard BEFORE any filesystem access (mirror audit_cmd).
     if !is_safe_run_id(&run_id) {
         return Err(format!("invalid run_id: {run_id}"));
@@ -1444,8 +1511,7 @@ fn load_run(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, 
     })
 }
 
-#[tauri::command]
-fn enumerate_runs(cwd: String) -> Vec<RunEntry> {
+fn enumerate_runs_impl(cwd: String) -> Vec<RunEntry> {
     let dir = sessions_dir(&cwd);
     let rd = match std::fs::read_dir(&dir) {
         Ok(rd) => rd,
@@ -1489,8 +1555,7 @@ fn enumerate_runs(cwd: String) -> Vec<RunEntry> {
     entries
 }
 
-#[tauri::command]
-fn run_decision(
+fn run_decision_impl(
     cli_binary: String,
     cwd: String,
     args: Vec<String>,
@@ -1520,6 +1585,57 @@ fn run_decision(
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         exit_code: output.status.code().unwrap_or(-1),
     })
+}
+
+fn orchestration_root(
+    window: &tauri::WebviewWindow,
+    state: &OrchestrationWindowState,
+) -> Result<String, String> {
+    require_orchestration_window(window)?;
+    state
+        .context
+        .lock()
+        .map_err(|_| "could not read orchestration context".to_string())?
+        .as_ref()
+        .map(|context| context.cwd.clone())
+        .ok_or_else(|| "orchestration context is unavailable".to_string())
+}
+
+#[tauri::command]
+fn load_run(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    run_id: String,
+) -> Result<RunData, String> {
+    load_run_impl(
+        run_id,
+        orchestration_root(&window, state.inner())?,
+        "voss".to_string(),
+    )
+}
+
+#[tauri::command]
+fn enumerate_runs(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+) -> Result<Vec<RunEntry>, String> {
+    Ok(enumerate_runs_impl(orchestration_root(
+        &window,
+        state.inner(),
+    )?))
+}
+
+#[tauri::command]
+fn run_decision(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    args: Vec<String>,
+) -> Result<DecisionResult, String> {
+    run_decision_impl(
+        "voss".to_string(),
+        orchestration_root(&window, state.inner())?,
+        args,
+    )
 }
 
 // ---- voss serve sidecar (V15) ----------------------------------------------
@@ -1601,7 +1717,7 @@ fn get_orchestration_context(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, OrchestrationWindowState>,
 ) -> Result<OrchestrationContext, String> {
-    require_orchestration_window(&window)?;
+    let _ = orchestration_root(&window, state.inner())?;
     state
         .context
         .lock()
