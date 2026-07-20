@@ -41,7 +41,7 @@ from .bos_decisions import (
 )
 from .swarm_agents import is_native, resolve_agent_argv
 from .swarm_filebus import read_result_file, write_shared_context, write_task_file
-from .swarm_store import Role, SwarmStore, Task
+from .swarm_store import CANDIDATE_READY, DONE, Role, SwarmStore, Task
 from .swarm_watch import OwnershipWatcher, detect_violations, revert_paths
 from .swarm_worktree import (
     changed_files,
@@ -156,6 +156,21 @@ async def run_cli_member(
     absolute path so the worktree stays hermetic — so it is read from `repo_root`.
     """
     repo_root = Path(repo_root)
+
+    current_swarm = store.get(swarm_id)
+    current_task = current_swarm.task(task.id) if current_swarm is not None else None
+    if current_task is not None and current_task.state in {CANDIDATE_READY, DONE}:
+        result = read_result_file(repo_root, swarm_id, role.name)
+        return MemberResult(
+            role=role.name,
+            task_id=task.id,
+            exit_code=0,
+            candidate_ready=current_task.state == CANDIDATE_READY,
+            candidate_branch=current_task.candidate_branch,
+            candidate_worktree=current_task.candidate_worktree,
+            candidate_head=current_task.candidate_head,
+            summary=result.summary if result is not None else None,
+        )
 
     mw = create_member_worktree(repo_root, swarm_id, role.name)
 

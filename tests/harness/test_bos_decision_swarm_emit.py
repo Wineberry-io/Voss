@@ -112,9 +112,29 @@ def test_repeat_assignment_is_dedup_noop(repo: Path) -> None:
     role = swarm.roster[0]
     task = store.add_task(swarm.id, "edit owned", owned_files=["owned.py"])
 
+    spawn = _spawn(repo, swarm.id, "builder-1")
+    spawn_calls = 0
+
+    def counting_spawn(argv: list[str], cwd: Path) -> _FakeHandle:
+        nonlocal spawn_calls
+        spawn_calls += 1
+        return spawn(argv, cwd)
+
+    results = []
     for _ in range(2):
-        asyncio.run(
-            run_cli_member(store, repo, swarm.id, role, task, spawn_fn=_spawn(repo, swarm.id, "builder-1"))
+        results.append(
+            asyncio.run(
+                run_cli_member(
+                    store,
+                    repo,
+                    swarm.id,
+                    role,
+                    task,
+                    spawn_fn=counting_spawn,
+                )
+            )
         )
 
+    assert spawn_calls == 1
+    assert results[1] == results[0]
     assert len(_read_decisions(repo)) == 1
