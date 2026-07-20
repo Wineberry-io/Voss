@@ -50,12 +50,7 @@ describe('MemorySurface', () => {
     ));
     await flush();
 
-    expect(fetchMemoryMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:5001',
-      'tok',
-      '/repo',
-      undefined,
-    );
+    expect(fetchMemoryMock).toHaveBeenCalledWith('test-sidecar', undefined);
     expect(el.querySelector('.memory-search')).toBeTruthy();
     expect(el.querySelector('.memory-summary')?.textContent).toContain('5 files');
   });

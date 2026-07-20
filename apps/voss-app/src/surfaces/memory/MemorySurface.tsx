@@ -2,7 +2,7 @@
 //
 // Voss memory lives in the harness (voss/harness/memory_store.py). V24-11 exposed it
 // over the loopback server's GET /memory route, so when the app has a live server
-// (baseUrl + token + cwd) this surface renders the real memory summary + a recall
+// (opaque sidecar handle) this surface renders the real memory summary + a recall
 // search. With no live server it falls back to the honest harness-backed state
 // (the /memory slash command). It synthesizes NO rows — hits come only from the
 // server (honest-signal discipline, like the swarm surface).

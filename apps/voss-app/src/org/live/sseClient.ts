@@ -1,7 +1,6 @@
 // VCKP-06 live SSE consumer (GATED on V13.1, best-effort). The FIRST SSE consumer
-// in the org view. Consumes the V13.1 `subscribeToEvents` async-generator
-// VERBATIM (never raw EventSource — that cannot set the `Authorization: Bearer`
-// header, sse.ts:20) and routes each event into two sinks:
+// in the org view. Consumes the Rust-forwarded sidecar event stream and routes
+// each event into two sinks:
 //   1. ingestEvent (attentionQueue) — surfaces permission/budget/gate/etc rows.
 //   2. the module-level live overlay signal — latest budget/status/confidence/
 //      gate per session, keyed by the event's session correlation key.
@@ -214,8 +213,7 @@ export interface ConnectLiveStreamArgs {
   onEnd?: () => void;
   /**
    * Test/mock injection: an async-iterable of AgentEvents to consume instead of
-   * the real `subscribeToEvents` fetch. When omitted, the real SDK consumer is
-   * used with the AbortController's signal.
+   * the Tauri Channel stream.
    */
   stream?: AsyncIterable<AgentEvent>;
 }
@@ -226,8 +224,8 @@ export interface LiveStreamHandle {
 }
 
 /**
- * Connect a live SSE stream for the selected run. Consumes `subscribeToEvents`
- * (or an injected `stream`) inside a `for await`, routing each event into both
+ * Connect a live SSE stream for the selected run. Consumes the Rust-forwarded
+ * stream (or an injected test stream), routing each event into both
  * ingestEvent (attention queue) and the live overlay. Sets liveLabel to 'live'
  * while the stream is active and resets to 'snapshot' on end / abort / error.
  *

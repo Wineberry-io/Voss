@@ -2,9 +2,8 @@
 //
 // The swarm surface (and its command bar) are mounted prop-less, so they reach the
 // live server through this module signal instead of props. App sets it from the
-// BuiltVossClient inside ensureVossClient; surfaces read baseUrl/token (swarm
-// snapshot fetch) and followUpClient (directing live agents). The token rides the
-// Authorization header only — never logged (T-V15-10). Immutable updates only.
+// BuiltVossClient inside ensureVossClient; surfaces receive only an opaque
+// Rust-owned sidecar handle plus the follow-up client.
 
 import { createSignal } from 'solid-js';
 

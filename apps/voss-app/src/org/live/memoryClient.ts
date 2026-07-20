@@ -21,8 +21,7 @@ export interface MemoryResponse {
 }
 
 /**
- * Fetch the memory summary (and recall hits when `q` is given) from the
- * `voss serve` sidecar at `baseUrl`. Throws on a non-OK response.
+ * Fetch memory through the Rust-owned sidecar operation proxy.
  */
 export async function fetchMemory(
   sidecarId: string,

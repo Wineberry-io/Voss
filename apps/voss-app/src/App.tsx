@@ -605,9 +605,7 @@ export default function App() {
         devlog('info', 'run.native', 'create session');
         r = await built.runNativeClient.createSession(spec);
       } catch (e) {
-        // "Load failed" surfaces here when the webview blocks the loopback
-        // fetch (CSP connect-src) or the server lacks CORS for the webview
-        // origin (cross-origin localhost:5173 -> 127.0.0.1:port preflight).
+        // Rust owns the loopback credential and maps proxy failures back here.
         devlog('error', 'run.native', 'createSession fetch failed', e);
         throw e;
       }

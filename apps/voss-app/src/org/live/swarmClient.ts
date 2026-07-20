@@ -3,8 +3,7 @@
 // Read-only snapshot of a swarm's authoritative state: GET /swarm/{id} →
 // {v, swarm:{id, goal, cwd, roster:[Role], tasks:[Task]}}. This is the structure
 // + task-state source of truth; live transitions ride the SSE bus (swarm.* events,
-// handled in sseClient.ts / swarmLive.ts). The bearer token is the sole auth for
-// the loopback server and rides the Authorization header only — never logged.
+// handled in sseClient.ts / swarmLive.ts). Rust retains loopback credentials.
 
 import { callSidecar } from './sidecarClient';
 
@@ -36,8 +35,7 @@ export interface SwarmSnapshot {
 }
 
 /**
- * Fetch a swarm's authoritative snapshot from the `voss serve` sidecar at
- * `baseUrl`. Throws on a non-OK response (404 = no such swarm).
+ * Fetch a swarm's authoritative snapshot through the Rust sidecar proxy.
  */
 export async function fetchSwarm(
   sidecarId: string,

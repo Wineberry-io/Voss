@@ -43,17 +43,18 @@ describe('launchSwarm', () => {
 
     expect(id).toBe('sw9');
     expect(activeSwarmId()).toBe('sw9');
-    expect(createSwarm).toHaveBeenCalledWith('http://x', 't', {
+    expect(createSwarm).toHaveBeenCalledWith('test-sidecar', {
       goal: 'ship it',
       builders: 2,
       cwd: '/repo',
+      roster: undefined,
     });
     // streams only the 2 native sessions (pending CLI role skipped)
     expect(connectLiveStream).toHaveBeenCalledTimes(2);
     // coordinator kicked with the goal
     expect(postMessage).toHaveBeenCalledWith('s-co', 'ship it');
     // a pending CLI role is present → the headless driver is kicked
-    expect(runSwarm).toHaveBeenCalledWith('http://x', 't', 'sw9');
+    expect(runSwarm).toHaveBeenCalledWith('test-sidecar', 'sw9');
   });
 
   it('forwards an explicit roster and skips runSwarm when all roles are native', async () => {
@@ -72,7 +73,7 @@ describe('launchSwarm', () => {
 
     await launchSwarm(srv, { goal: 'go', builders: 1, roster });
 
-    expect(createSwarm).toHaveBeenCalledWith('http://x', 't', {
+    expect(createSwarm).toHaveBeenCalledWith('test-sidecar', {
       goal: 'go',
       builders: 1,
       cwd: '/repo',
