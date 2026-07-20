@@ -822,6 +822,19 @@ Exit gates:
 - two workspaces cannot share the wrong registry or server;
 - manual 24-hour direct-PTY terminal soak passes common shells, editors, pagers, SSH, REPLs, TUIs, and CLI agents.
 
+**Implementation checkpoint (2026-07-19): Phase 0 remains in progress.**
+
+Closed in the first containment slice:
+
+- generic shell sessions strip inherited `VOSS_*` state and no longer receive `VOSS_EMBEDDED` or `VOSS_AGENT_ID`;
+- the TypeScript SDK is part of the pnpm workspace with declared runtime dependencies; the production app build and full frontend test suite pass;
+- agent registries are keyed by canonical workspace path, and sidecar processes are keyed by canonical registered project root;
+- the unused arbitrary environment-read and swarm-file-write Tauri commands were removed, eliminating that task-filename traversal path;
+- external CLI work is committed to a preserved `candidate_ready` branch/worktree/head, never auto-merged or force-cleaned, and a retry cannot erase an existing candidate;
+- candidate events now flow through Python contracts, the generated Rust SDK, server SSE adaptation, and the Solid live store.
+
+Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, Rust-held sidecar tokens and opaque capabilities, scoped Tauri permissions/CSP hardening, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. Exact registered-root matching is an incremental boundary, not a complete defense against a compromised webview while workspace mutation remains broadly invokable.
+
 ### Phase 1: Extract engine boundaries and prove tmux
 
 **Goal:** Introduce `SessionEngine` without changing user behavior, then validate Control Mode independently.
