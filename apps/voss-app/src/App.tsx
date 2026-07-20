@@ -44,7 +44,7 @@ import RunCommandBar, {
 import type { RunMode } from './org/cockpit/runIntake';
 import { liveLabel } from './org/live/sseClient';
 import {
-  buildVossClientFromHandshake,
+  buildVossClientFromHandle,
   type BuiltVossClient,
 } from './org/live/vossClientBuild';
 import { startVossServe } from './org/live/sidecarClient';
@@ -486,23 +486,21 @@ export default function App() {
     const existing = vossClient();
     if (existing && vossClientCwd === cwd) return existing;
     devlog('info', 'sidecar.serve', 'start_voss_serve', { cwd });
-    let handshake;
+    let handle;
     try {
-      handshake = await startVossServe(cwd);
+      handle = await startVossServe(cwd);
     } catch (e) {
       devlog('error', 'sidecar.serve', 'start_voss_serve failed', e);
       throw e;
     }
-    // T-V15-10: log the port only — the token is never logged or stringified.
-    devlog('info', 'sidecar.serve', 'handshake ok', { port: handshake.port });
-    const built = buildVossClientFromHandshake(handshake);
+    devlog('info', 'sidecar.serve', 'sidecar ready');
+    const built = buildVossClientFromHandle(handle);
     vossClientCwd = cwd;
     setVossClient(built);
     // Expose the live server to prop-less surfaces (swarm snapshot fetch +
     // command-bar directing) — token rides the Authorization header only.
     setLiveServer({
-      baseUrl: built.baseUrl,
-      token: built.token,
+      sidecarId: built.sidecarId,
       cwd,
       followUpClient: built.followUpClient,
     });
@@ -604,7 +602,7 @@ export default function App() {
       const built = await ensureVossClient(cwd);
       let r: { id: string };
       try {
-        devlog('info', 'run.native', 'POST /session', { baseUrl: built.baseUrl });
+        devlog('info', 'run.native', 'create session');
         r = await built.runNativeClient.createSession(spec);
       } catch (e) {
         // "Load failed" surfaces here when the webview blocks the loopback
@@ -621,8 +619,7 @@ export default function App() {
       // pane and start the turn.
       openNativePane({
         sessionId: r.id,
-        baseUrl: built.baseUrl,
-        token: built.token,
+        sidecarId: built.sidecarId,
       });
       // createSession only mints an IDLE session — the goal must be POSTed as
       // the first message to actually start a turn (server `_run_turn`). Sent
@@ -1812,9 +1809,7 @@ export default function App() {
             }}
             memorySlot={() => (
               <MemorySurface
-                baseUrl={vossClient()?.baseUrl}
-                token={vossClient()?.token}
-                cwd={workspacePath() ?? undefined}
+                sidecarId={vossClient()?.sidecarId}
               />
             )}
             reviewSlot={() => (
@@ -1831,16 +1826,14 @@ export default function App() {
                     ensureClient: async (cwd) => {
                       const built = await ensureVossClient(cwd);
                       return {
-                        baseUrl: built.baseUrl,
-                        token: built.token,
+                        sidecarId: built.sidecarId,
                         client: built.client,
                       };
                     },
                     openAttachedPane: (r) =>
                       openNativePane({
                         sessionId: r.sessionId,
-                        baseUrl: r.baseUrl,
-                        token: r.token,
+                        sidecarId: r.sidecarId,
                       }),
                   })
                 }
