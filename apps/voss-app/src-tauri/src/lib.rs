@@ -177,9 +177,9 @@ fn ensure_registry<'a>(
         .map_err(|_| "agent registry lock poisoned".to_string())?;
     let path = match workspace_path {
         Some(ws) => {
-            let root = std::fs::canonicalize(ws)
-                .map_err(|_| "workspace path does not exist".to_string())?;
-            registry_path(&root)
+            let workspace_id =
+                registered_workspace_id_for_path(ws, &workspaces::load_workspaces_index())?;
+            registry_path(&workspace_id).map_err(|e| e.to_string())?
         }
         None => global_registry_path(),
     };
@@ -188,6 +188,24 @@ fn ensure_registry<'a>(
         guard.insert(path.clone(), conn);
     }
     Ok((guard, path))
+}
+
+fn registered_workspace_id_for_path(
+    workspace_path: &str,
+    index: &WorkspacesIndex,
+) -> Result<String, String> {
+    let canonical = std::fs::canonicalize(workspace_path)
+        .map_err(|_| "workspace path does not exist".to_string())?;
+    index
+        .workspaces
+        .iter()
+        .filter_map(|workspace| {
+            let project_path = workspace.project_path.as_deref()?;
+            let registered = std::fs::canonicalize(project_path).ok()?;
+            (registered == canonical).then(|| workspace.id.clone())
+        })
+        .next()
+        .ok_or_else(|| "workspace is not a registered project".to_string())
 }
 
 fn is_voss_cli_binary(cli_binary: &str) -> bool {
@@ -420,9 +438,9 @@ async fn spawn_managed_agent(
 mod tests {
     use super::{
         authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
-        command_manifest, decode_sse_frame, ensure_registry, env_for_embedded_cli,
-        is_interactive_voss_command, normalize_orchestration_view, sidecar_url, take_sse_frame,
-        SidecarHandle,
+        command_manifest, decode_sse_frame, env_for_embedded_cli, is_interactive_voss_command,
+        normalize_orchestration_view, registered_workspace_id_for_path, sidecar_url,
+        take_sse_frame, SidecarHandle,
     };
     use std::collections::HashSet;
     use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
@@ -687,22 +705,20 @@ mod tests {
     }
 
     #[test]
-    fn registries_are_keyed_by_canonical_workspace() {
+    fn registry_identity_comes_from_the_registered_workspace() {
         let base = unique_tmp("registries");
         let first = base.join("first");
         let second = base.join("second");
         fs::create_dir_all(&first).unwrap();
         fs::create_dir_all(&second).unwrap();
-        let registries = std::sync::Mutex::new(std::collections::HashMap::new());
 
-        let (guard, first_key) =
-            ensure_registry(&registries, first.to_str()).expect("first registry");
-        drop(guard);
-        let (guard, second_key) =
-            ensure_registry(&registries, second.to_str()).expect("second registry");
-        assert_ne!(first_key, second_key);
-        assert_eq!(guard.len(), 2);
-        drop(guard);
+        let index = workspace_index(Some(first.to_string_lossy().into_owned()));
+        assert_eq!(
+            registered_workspace_id_for_path(first.to_str().unwrap(), &index).unwrap(),
+            "workspace-1"
+        );
+        assert!(registered_workspace_id_for_path(second.to_str().unwrap(), &index).is_err());
+        assert!(!first.join(".voss").exists());
 
         fs::remove_dir_all(base).ok();
     }
