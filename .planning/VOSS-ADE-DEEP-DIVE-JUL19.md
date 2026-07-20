@@ -9,7 +9,7 @@
 
 Voss should become a **terminal-first development environment whose durable process engine is tmux on supported Unix systems and whose Voss capabilities are an optional control plane**. Users must be able to run their existing shells, TUIs, tools, and CLI agents with their existing accounts, configuration, permissions, models, billing, update path, and native interface. Voss should enhance those processes progressively, never replace them as the price of using the terminal.
 
-The current desktop is much further along as an orchestration UI than its older planning documents imply. It already has a substantial terminal grid, agent and activity surfaces, Voss protocol panes, an organization cockpit, board/audit/replay views, and a V25 server-native swarm UI. The critical gap is beneath those surfaces: the live runtime is still one process-local `portable-pty` child per pane. Saved sessions reconstruct shells and old text; they do not preserve running processes. Some ordinary shell paths also inject Voss environment variables, several visible lifecycle controls are not wired, external CLI launch arguments are generalized incorrectly, and terminal-only workspace activity writes repo-local `.voss` state.
+The current desktop is much further along as an orchestration UI than its older planning documents imply. It already has a substantial terminal grid, agent and activity surfaces, Voss protocol panes, an organization cockpit, board/audit/replay views, and a V25 server-native swarm UI. The critical gap is beneath those surfaces: the live runtime is still one process-local `portable-pty` child per pane. Saved sessions reconstruct shells and old text; they do not preserve running processes. The first P0 containment slices have removed Voss environment injection from ordinary shells, moved automatic terminal state out of repositories, and separated terminal and orchestration command authority; lifecycle controls and external CLI launch contracts remain incomplete.
 
 The market supports a clear direction:
 
@@ -84,7 +84,7 @@ The local machine did not have tmux installed, so no live Control Mode or reatta
 | Desktop | Tauri 2, Solid 1.9, Vite 8, Tailwind 4, xterm.js 5.5 |
 | Terminal | `portable-pty`, one in-process PTY session per pane, Rust-to-webview byte channel, xterm rendering |
 | Grid | Binary split tree, pane focus/move/close, presets, workspace tabs, command palette, themes/settings/keymaps |
-| Persistence | JSON layout/session/scrollback, workspace storage, repo-local `.voss` files, SQLite agent registry |
+| Persistence | Private app-data sessions/layouts/agent registries; explicit Voss project data remains repo-local under `.voss` |
 | Agent UX | Launch modal, agent sidebar, activity/usage/context, protocol panes, status dots and notifications |
 | Voss UI | Overview, Tasks, Agents, Orchestra, Review, Context, Memory, Settings, organization cockpit, board, audit, replay |
 | Voss runtime | Python `voss serve` child, loopback bearer auth, REST + SSE, generated TypeScript SDK |
@@ -108,7 +108,7 @@ The app/core surface is already large: roughly 58,000 lines across TypeScript, T
 
 ### Critical product contradictions
 
-Detailed code paths and verification evidence are recorded in [`00-local-code-audit.md`](research/voss-ade/00-local-code-audit.md); review/security tracks add the external-CLI merge and Tauri/path findings.
+Detailed code paths and verification evidence are recorded in [`00-local-code-audit.md`](research/voss-ade/00-local-code-audit.md); review/security tracks add the external-CLI merge and Tauri/path findings. This table records the audit baseline; the implementation checkpoint below is authoritative for findings already closed on 2026-07-19.
 
 | Severity | Finding | Evidence and impact |
 |---|---|---|
@@ -828,7 +828,7 @@ Closed in the first containment slice:
 
 - generic shell sessions strip inherited `VOSS_*` state and no longer receive `VOSS_EMBEDDED` or `VOSS_AGENT_ID`;
 - the TypeScript SDK is part of the pnpm workspace with declared runtime dependencies; the production app build and full frontend test suite pass;
-- agent registries are keyed by canonical workspace path, and sidecar processes are keyed by canonical registered project root;
+- agent registries are isolated by stable workspace ID, and sidecar processes are keyed by canonical registered project root;
 - the unused arbitrary environment-read and swarm-file-write Tauri commands were removed, eliminating that task-filename traversal path;
 - external CLI work is committed to a preserved `candidate_ready` branch/worktree/head, never auto-merged or force-cleaned, and a retry cannot erase an existing candidate;
 - candidate events now flow through Python contracts, the generated Rust SDK, server SSE adaptation, and the Solid live store.
@@ -836,8 +836,11 @@ Closed in the first containment slice:
 - the production CSP no longer permits arbitrary localhost ports or direct Anthropic connections from the webview.
 - every registered application command is now opt-in through Tauri's generated command manifest; the `main` terminal window has no Voss sidecar or run-review permissions, while the separate optional `orchestration` window has no PTY or agent-process-spawn permissions;
 - Review, Orchestra, Memory, and Ask Voss entry points open the orchestration window explicitly; Voss sidecar commands also enforce the invoking window label in Rust, and Review derives its canonical workspace root from Rust-held console context rather than renderer-supplied paths.
+- project sessions, named layouts, and live agent registries now persist under `~/.config/voss-app`, keyed by stable workspace ID; normal project open and structural terminal autosave no longer create `.voss`;
+- valid legacy `.voss/session.json` and `.voss/layouts/*.json` files are copied once into private app state without modifying or deleting the originals; legacy agent registries are intentionally not copied because their process records are ephemeral and may be stale;
+- renderer session/layout commands carry workspace IDs rather than filesystem paths, and Rust derives any legacy-read path from the persisted workspace index.
 
-Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. The terminal and orchestration renderers now have separate command authority; remaining privileged commands still require their own argument validation and opaque-handle migration as their surrounding P0 work lands.
+Still open before the Phase 0 exit gate: raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. The terminal and orchestration renderers now have separate command authority; remaining privileged commands still require their own argument validation and opaque-handle migration as their surrounding P0 work lands.
 
 ### Phase 1: Extract engine boundaries and prove tmux
 
@@ -1061,7 +1064,7 @@ Slice A reduces current risk and tests feasibility. Slice B tests the product be
 ### High confidence
 
 - The current desktop is direct-PTY and does not preserve live processes across desktop exit.
-- Generic shells currently receive Voss environment state and project sessions write repo-local `.voss` data.
+- Generic shell environment neutrality and private terminal-state storage are now covered by the 2026-07-19 P0 containment tests; tmux-backed process persistence is not yet implemented.
 - External CLI launch construction, workspace binding, lifecycle controls, OSC parsing, frontend build boundary, and CLI-swarm integration have the concrete gaps listed above.
 - tmux is a credible durable Unix process/session authority and Control Mode is its intended GUI integration protocol.
 - tmux socket access is full trust, not pane-level isolation.
