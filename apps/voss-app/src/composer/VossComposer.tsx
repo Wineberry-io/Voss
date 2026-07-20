@@ -28,6 +28,7 @@ export interface VossComposerProps {
   open: boolean;
   onClose: () => void;
   onCreated?: (spec: RunSpec) => void | Promise<void>;
+  allowedTargets?: readonly RunTarget[];
 }
 
 type SafetyMode = 'Read only' | 'Can edit' | 'Autopilot';
@@ -57,7 +58,13 @@ const VossComposer: Component<VossComposerProps> = (props) => {
   const [scope, setScope] = createSignal('');
   const [budget, setBudget] = createSignal('');
   const [team, setTeam] = createSignal('solo');
-  const [target, setTarget] = createSignal<RunTarget>('native');
+  const targetOptions = () =>
+    TARGETS.filter((target) =>
+      props.allowedTargets ? props.allowedTargets.includes(target.id) : true,
+    );
+  const [target, setTarget] = createSignal<RunTarget>(
+    props.allowedTargets?.[0] ?? 'native',
+  );
   const [contextPath, setContextPath] = createSignal('');
   const [error, setError] = createSignal<string | null>(null);
 
@@ -243,7 +250,7 @@ const VossComposer: Component<VossComposerProps> = (props) => {
                   value={target()}
                   onChange={(e) => setTarget(e.currentTarget.value as RunTarget)}
                 >
-                  <For each={TARGETS}>{(t) => <option value={t.id}>{t.label}</option>}</For>
+                  <For each={targetOptions()}>{(t) => <option value={t.id}>{t.label}</option>}</For>
                 </select>
               </label>
               <label class="composer-field">

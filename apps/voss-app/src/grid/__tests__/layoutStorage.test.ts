@@ -70,49 +70,49 @@ describe('layoutStorage — UI-SPEC copy constants', () => {
 describe('layoutStorage — Tauri invoke bridges', () => {
   beforeEach(() => h.invoke.mockReset());
 
-  it('saveLayout → invoke("save_layout", { workspacePath, name, layout })', async () => {
+  it('saveLayout → invoke("save_layout", { workspaceId, name, layout })', async () => {
     h.invoke.mockResolvedValueOnce(undefined);
     const layout = makeLayout();
-    await saveLayout('/ws', 'build-watch', layout);
+    await saveLayout('ws-1', 'build-watch', layout);
     expect(h.invoke).toHaveBeenCalledTimes(1);
     expect(h.invoke).toHaveBeenCalledWith('save_layout', {
-      workspacePath: '/ws',
+      workspaceId: 'ws-1',
       name: 'build-watch',
       layout,
     });
   });
 
-  it('loadLayout → invoke("load_layout", { workspacePath, name }) and returns LayoutFile', async () => {
+  it('loadLayout → invoke("load_layout", { workspaceId, name }) and returns LayoutFile', async () => {
     const layout = makeLayout();
     h.invoke.mockResolvedValueOnce(layout);
-    const got = await loadLayout('/ws', 'build-watch');
+    const got = await loadLayout('ws-1', 'build-watch');
     expect(h.invoke).toHaveBeenCalledWith('load_layout', {
-      workspacePath: '/ws',
+      workspaceId: 'ws-1',
       name: 'build-watch',
     });
     expect(got).toBe(layout);
   });
 
-  it('listLayouts → invoke("list_layouts", { workspacePath }) and returns string[]', async () => {
+  it('listLayouts → invoke("list_layouts", { workspaceId }) and returns string[]', async () => {
     h.invoke.mockResolvedValueOnce(['apple', 'zebra']);
-    const names = await listLayouts('/ws');
+    const names = await listLayouts('ws-1');
     expect(h.invoke).toHaveBeenCalledWith('list_layouts', {
-      workspacePath: '/ws',
+      workspaceId: 'ws-1',
     });
     expect(names).toEqual(['apple', 'zebra']);
   });
 
-  it('loadDefaultLayout → invoke("load_default_layout", { workspacePath }); accepts null', async () => {
+  it('loadDefaultLayout → invoke("load_default_layout", { workspaceId }); accepts null', async () => {
     h.invoke.mockResolvedValueOnce(null);
-    const missing = await loadDefaultLayout('/ws');
+    const missing = await loadDefaultLayout('ws-1');
     expect(h.invoke).toHaveBeenCalledWith('load_default_layout', {
-      workspacePath: '/ws',
+      workspaceId: 'ws-1',
     });
     expect(missing).toBeNull();
 
     const layout = makeLayout();
     h.invoke.mockResolvedValueOnce(layout);
-    const present = await loadDefaultLayout('/ws');
+    const present = await loadDefaultLayout('ws-1');
     expect(present).toBe(layout);
   });
 });

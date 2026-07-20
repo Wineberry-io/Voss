@@ -118,6 +118,7 @@ export interface RunCommandBarProps {
    *  the bar, so a fresh pane id is minted per run by default (mirrors
    *  PaneComponent using props.id as paneId). */
   resolvePaneId?: () => string;
+  allowedTargets?: readonly RunTarget[];
 }
 
 type SafetyMode = 'Read only' | 'Can edit' | 'Autopilot';
@@ -162,7 +163,13 @@ const RunCommandBar: Component<RunCommandBarProps> = (props) => {
   const [team, setTeam] = createSignal<string>('solo');
   const [scope, setScope] = createSignal('');
   const [budget, setBudget] = createSignal('');
-  const [target, setTarget] = createSignal<RunTarget>('native');
+  const targetOptions = () =>
+    TARGETS.filter((target) =>
+      props.allowedTargets ? props.allowedTargets.includes(target.id) : true,
+    );
+  const [target, setTarget] = createSignal<RunTarget>(
+    props.allowedTargets?.[0] ?? 'native',
+  );
   const [detailsOpen, setDetailsOpen] = createSignal(false);
   const [contextAttached, setContextAttached] = createSignal(false);
   const [blockReason, setBlockReason] = createSignal<string | null>(null);
@@ -313,7 +320,7 @@ const RunCommandBar: Component<RunCommandBarProps> = (props) => {
 
           <div class="run-bar__group" aria-label="Run target">
             <div class="run-bar__seg">
-              <For each={TARGETS}>
+              <For each={targetOptions()}>
                 {(t) => (
                   <button
                     type="button"

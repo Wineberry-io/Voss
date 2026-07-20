@@ -314,11 +314,15 @@ def make_toolset(
     renderer=None,
     net: NetSession | None = None,
     session_id: str | None = None,
+    background_indexing: bool = True,
 ) -> dict[str, ToolEntry]:
     """Build the harness toolset bound to a project cwd.
 
     Returns a dict of tool name -> ToolEntry. Each entry carries an
     explicit `is_mutating` boolean used by PermissionGate.
+
+    Ephemeral callers can disable background indexing so worker threads do
+    not outlive and write into a temporary cwd during teardown.
 
     T2-04: When `renderer` is provided AND exposes `show_diff_modal`,
     `fs_edit_many` routes through the M9-05 DiffModal for per-hunk
@@ -949,7 +953,7 @@ def make_toolset(
     # ONE held service (one Chroma client) per toolset; the accessor threads
     # session_id through and kicks off the background build so session start
     # never blocks on the embedding cold-load.
-    if _CodeIntelService is not None:
+    if _CodeIntelService is not None and background_indexing:
         try:
             # Construct directly — NOT via _code_service()/for_cwd(), whose
             # synchronous M10 build_index walks the cwd on the boot thread
@@ -966,14 +970,14 @@ def make_toolset(
         attach_code_recall_tool(result, code_index_service=_code_index_service)
 
     # --- V22-05 external-source recall ---
-    external_service = None
-    try:
-        from voss.harness.recall.external_index import ExternalRecallService
+    if background_indexing:
+        try:
+            from voss.harness.recall.external_index import ExternalRecallService
 
-        external_service = ExternalRecallService(cwd, session_id=session_id)
-        external_service.ensure_background_build()
-    except Exception:  # noqa: BLE001 — external recall is optional
-        pass
+            external_service = ExternalRecallService(cwd, session_id=session_id)
+            external_service.ensure_background_build()
+        except Exception:  # noqa: BLE001 — external recall is optional
+            pass
 
     return result
 

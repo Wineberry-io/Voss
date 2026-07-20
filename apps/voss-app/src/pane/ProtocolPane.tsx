@@ -39,8 +39,7 @@ import './ProtocolPane.css';
 
 export interface ProtocolPaneProps {
   sessionId: string;
-  baseUrl: string;
-  token: string;
+  sidecarId: string;
   /** Workspace cwd — the D-12 "Retry start" re-invokes startVossServe(cwd). */
   cwd?: string;
   /** Called when the session ends (clean idle or server death — D-11). */
@@ -129,20 +128,14 @@ export default function ProtocolPane(props: ProtocolPaneProps) {
 
   const st = (): ProtocolSessionState =>
     protocolSessions()[props.sessionId] ??
-    defaultProtocolState({ baseUrl: props.baseUrl, token: props.token });
+    defaultProtocolState({ sidecarId: props.sidecarId });
 
   onMount(() => {
     devlog('info', 'proto.pane', 'mount + ensureStream', {
       sessionId: props.sessionId?.slice(0, 6),
-      hasBaseUrl: Boolean(props.baseUrl),
-      hasToken: Boolean(props.token),
+      hasSidecar: Boolean(props.sidecarId),
     });
-    ensureProtocolStream(
-      props.sessionId,
-      props.baseUrl,
-      props.token,
-      props.stream,
-    );
+    ensureProtocolStream(props.sessionId, props.sidecarId, props.stream);
     const tick = setInterval(() => {
       if (st().bootState === 'booting') setElapsed((n) => n + 1);
     }, 1000);
@@ -165,11 +158,7 @@ export default function ProtocolPane(props: ProtocolPaneProps) {
   const retryStart = async () => {
     try {
       const h = await startVossServe(props.cwd ?? '');
-      reconnectProtocolStream(
-        props.sessionId,
-        `http://127.0.0.1:${h.port}`,
-        h.token,
-      );
+      reconnectProtocolStream(props.sessionId, h.sidecarId);
       endedFired = false;
     } catch {
       // startVossServe failed — stay in the error state (message already

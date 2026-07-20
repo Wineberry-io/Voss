@@ -1,0 +1,26 @@
+{
+  "identifier": "orchestration-capability",
+  "description": "Optional Voss sidecar, run review, memory, and swarm authority",
+  "windows": ["orchestration"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-start-dragging",
+    "allow-get-theme-overrides",
+    "allow-load-active-theme-id",
+    "allow-get-active-agents",
+    "allow-load-run",
+    "allow-enumerate-runs",
+    "allow-run-decision",
+    "allow-start-voss-serve",
+    "allow-call-voss-sidecar",
+    "allow-subscribe-voss-events",
+    "allow-unsubscribe-voss-events",
+    "allow-get-orchestration-context",
+    "allow-ui-log"
+  ]
+}

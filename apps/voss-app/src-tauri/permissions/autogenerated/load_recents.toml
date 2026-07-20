@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-recents"
+description = "Enables the load_recents command without any pre-configured scope."
+commands.allow = ["load_recents"]
+
+[[permission]]
+identifier = "deny-load-recents"
+description = "Denies the load_recents command without any pre-configured scope."
+commands.deny = ["load_recents"]

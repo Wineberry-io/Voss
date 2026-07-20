@@ -18,6 +18,22 @@ def _run(coro):
     return asyncio.get_event_loop().run_until_complete(coro) if False else asyncio.run(coro)
 
 
+def test_ephemeral_toolset_skips_background_indexing(tmp_path: Path, monkeypatch) -> None:
+    from voss.harness.code.service import CodeIntelService
+    from voss.harness.recall.external_index import ExternalRecallService
+
+    def fail(*args, **kwargs):
+        raise AssertionError("background indexer started")
+
+    monkeypatch.setattr(CodeIntelService, "_get_code_index_service", fail)
+    monkeypatch.setattr(ExternalRecallService, "__init__", fail)
+
+    tools = make_toolset(tmp_path, background_indexing=False)
+
+    assert "shell_run" in tools
+    assert "code_recall" not in tools
+
+
 class TestFsRead:
     def test_reads_text_file(self, project: Path) -> None:
         tools = make_toolset(project)

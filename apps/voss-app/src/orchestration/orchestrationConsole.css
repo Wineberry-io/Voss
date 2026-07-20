@@ -1,0 +1,44 @@
+.orchestration-console {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-0);
+  color: var(--fg-0);
+}
+
+.orchestration-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.orchestration-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.orchestration-surface {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.orchestration-state {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 24px;
+  color: var(--fg-2);
+  font: 13px/1.5 var(--font-ui);
+}
+
+.orchestration-state--error {
+  color: var(--accent-red);
+}

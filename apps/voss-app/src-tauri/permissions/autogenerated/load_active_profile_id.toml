@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-active-profile-id"
+description = "Enables the load_active_profile_id command without any pre-configured scope."
+commands.allow = ["load_active_profile_id"]
+
+[[permission]]
+identifier = "deny-load-active-profile-id"
+description = "Denies the load_active_profile_id command without any pre-configured scope."
+commands.deny = ["load_active_profile_id"]

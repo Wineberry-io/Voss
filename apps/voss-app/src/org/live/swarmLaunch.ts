@@ -29,7 +29,7 @@ export async function launchSwarm(
   srv: LiveServer,
   opts: LaunchSwarmOpts,
 ): Promise<string> {
-  const { id, sessions } = await createSwarm(srv.baseUrl, srv.token, {
+  const { id, sessions } = await createSwarm(srv.sidecarId, {
     goal: opts.goal,
     builders: opts.builders,
     cwd: srv.cwd,
@@ -40,9 +40,8 @@ export async function launchSwarm(
   const native = sessions.filter((s) => !!s.session_id);
   for (const s of native) {
     connectLiveStream({
-      baseUrl: srv.baseUrl,
+      sidecarId: srv.sidecarId,
       sessionId: s.session_id!,
-      token: srv.token,
     });
   }
 
@@ -58,7 +57,7 @@ export async function launchSwarm(
   // only rosters skip this entirely.
   const hasCli = sessions.some((s) => s.pending || !s.session_id);
   if (hasCli) {
-    await runSwarm(srv.baseUrl, srv.token, id);
+    await runSwarm(srv.sidecarId, id);
   }
   return id;
 }

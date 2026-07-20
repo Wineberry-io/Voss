@@ -3,8 +3,9 @@
 // Read-only snapshot of a swarm's authoritative state: GET /swarm/{id} →
 // {v, swarm:{id, goal, cwd, roster:[Role], tasks:[Task]}}. This is the structure
 // + task-state source of truth; live transitions ride the SSE bus (swarm.* events,
-// handled in sseClient.ts / swarmLive.ts). The bearer token is the sole auth for
-// the loopback server and rides the Authorization header only — never logged.
+// handled in sseClient.ts / swarmLive.ts). Rust retains loopback credentials.
+
+import { callSidecar } from './sidecarClient';
 
 export interface SwarmRole {
   name: string;
@@ -12,7 +13,7 @@ export interface SwarmRole {
   auth_pref: string;
 }
 
-export type SwarmTaskState = 'open' | 'assigned' | 'done';
+export type SwarmTaskState = 'open' | 'assigned' | 'candidate_ready' | 'done';
 
 export interface SwarmTask {
   id: string;
@@ -20,6 +21,9 @@ export interface SwarmTask {
   owned_files: string[];
   depends_on: string[];
   state: SwarmTaskState;
+  candidate_branch?: string | null;
+  candidate_worktree?: string | null;
+  candidate_head?: string | null;
 }
 
 export interface SwarmSnapshot {
@@ -31,21 +35,16 @@ export interface SwarmSnapshot {
 }
 
 /**
- * Fetch a swarm's authoritative snapshot from the `voss serve` sidecar at
- * `baseUrl`. Throws on a non-OK response (404 = no such swarm).
+ * Fetch a swarm's authoritative snapshot through the Rust sidecar proxy.
  */
 export async function fetchSwarm(
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
   swarmId: string,
 ): Promise<SwarmSnapshot> {
-  const res = await fetch(`${baseUrl}/swarm/${encodeURIComponent(swarmId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const body = await callSidecar<{ v: number; swarm: SwarmSnapshot }>(sidecarId, {
+    kind: 'get_swarm',
+    swarm_id: swarmId,
   });
-  if (!res.ok) {
-    throw new Error(`GET /swarm/${swarmId} failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { v: number; swarm: SwarmSnapshot };
   return body.swarm;
 }
 
@@ -80,8 +79,7 @@ export interface RoleSpecBody {
  * sessions. The coordinator does NOT auto-run — the caller kicks it.
  */
 export async function createSwarm(
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
   body: {
     goal: string;
     builders?: number;
@@ -89,23 +87,18 @@ export async function createSwarm(
     roster?: RoleSpecBody[];
   },
 ): Promise<CreateSwarmResult> {
-  const res = await fetch(`${baseUrl}/swarm`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      goal: body.goal,
-      builders: body.builders ?? 2,
-      cwd: body.cwd ?? '.',
-      ...(body.roster && body.roster.length > 0 ? { roster: body.roster } : {}),
-    }),
+  const out = await callSidecar<{
+    v: number;
+    id: string;
+    sessions: SpawnedSession[];
+  }>(sidecarId, {
+    kind: 'create_swarm',
+    goal: body.goal,
+    builders: body.builders ?? 2,
+    ...(body.roster && body.roster.length > 0
+      ? { roster: body.roster as unknown as Array<Record<string, unknown>> }
+      : {}),
   });
-  if (!res.ok) {
-    throw new Error(`POST /swarm failed: ${res.status}`);
-  }
-  const out = (await res.json()) as { v: number; id: string; sessions: SpawnedSession[] };
   return { id: out.id, sessions: out.sessions ?? [] };
 }
 
@@ -116,15 +109,11 @@ export async function createSwarm(
  * roles are untouched. No-op to call when a roster is all-native.
  */
 export async function runSwarm(
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
   swarmId: string,
 ): Promise<void> {
-  const res = await fetch(`${baseUrl}/swarm/${encodeURIComponent(swarmId)}/run`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+  await callSidecar(sidecarId, {
+    kind: 'run_swarm',
+    swarm_id: swarmId,
   });
-  if (!res.ok) {
-    throw new Error(`POST /swarm/${swarmId}/run failed: ${res.status}`);
-  }
 }

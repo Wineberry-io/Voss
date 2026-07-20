@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-spawn-managed-agent"
+description = "Enables the spawn_managed_agent command without any pre-configured scope."
+commands.allow = ["spawn_managed_agent"]
+
+[[permission]]
+identifier = "deny-spawn-managed-agent"
+description = "Denies the spawn_managed_agent command without any pre-configured scope."
+commands.deny = ["spawn_managed_agent"]

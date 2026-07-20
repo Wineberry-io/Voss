@@ -2,7 +2,7 @@
 //
 // Voss memory lives in the harness (voss/harness/memory_store.py). V24-11 exposed it
 // over the loopback server's GET /memory route, so when the app has a live server
-// (baseUrl + token + cwd) this surface renders the real memory summary + a recall
+// (opaque sidecar handle) this surface renders the real memory summary + a recall
 // search. With no live server it falls back to the honest harness-backed state
 // (the /memory slash command). It synthesizes NO rows — hits come only from the
 // server (honest-signal discipline, like the swarm surface).
@@ -22,9 +22,7 @@ import SurfaceEmpty from '../SurfaceEmpty';
 import { fetchMemory, type MemoryResponse } from '../../org/live/memoryClient';
 
 export interface MemorySurfaceProps {
-  baseUrl?: string;
-  token?: string;
-  cwd?: string;
+  sidecarId?: string;
 }
 
 const MemoryIcon = () => (
@@ -61,7 +59,7 @@ const MemoryFallback: Component = () => (
 );
 
 const MemorySurface: Component<MemorySurfaceProps> = (props) => {
-  const live = () => !!(props.baseUrl && props.token && props.cwd);
+  const live = () => !!props.sidecarId;
 
   const [submitted, setSubmitted] = createSignal('');
   const [query, setQuery] = createSignal('');
@@ -70,14 +68,12 @@ const MemorySurface: Component<MemorySurfaceProps> = (props) => {
     () =>
       live()
         ? {
-            baseUrl: props.baseUrl!,
-            token: props.token!,
-            cwd: props.cwd!,
+            sidecarId: props.sidecarId!,
             q: submitted(),
           }
         : null,
-    (args: { baseUrl: string; token: string; cwd: string; q: string }) =>
-      fetchMemory(args.baseUrl, args.token, args.cwd, args.q || undefined),
+    (args: { sidecarId: string; q: string }) =>
+      fetchMemory(args.sidecarId, args.q || undefined),
   );
 
   return (

@@ -43,7 +43,7 @@ describe('SwarmCommandBar', () => {
   });
 
   it('disabled-with-reason when connected but no live agents', () => {
-    setLiveServer({ baseUrl: 'http://x', token: 't', followUpClient: { postMessage: vi.fn() } });
+    setLiveServer({ sidecarId: 'test-sidecar', followUpClient: { postMessage: vi.fn() } });
     const el = mount();
     const input = el.querySelector<HTMLInputElement>('.swarm-bar__input')!;
     expect(input.disabled).toBe(true);
@@ -52,7 +52,7 @@ describe('SwarmCommandBar', () => {
 
   it('directs the selected target via postMessage when live', async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
-    setLiveServer({ baseUrl: 'http://x', token: 't', followUpClient: { postMessage } });
+    setLiveServer({ sidecarId: 'test-sidecar', followUpClient: { postMessage } });
     assign('builder-1', 's-b1');
     assign('builder-2', 's-b2');
 
@@ -76,7 +76,7 @@ describe('SwarmCommandBar', () => {
 
   it('parses a leading @role to target one session', async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
-    setLiveServer({ baseUrl: 'http://x', token: 't', followUpClient: { postMessage } });
+    setLiveServer({ sidecarId: 'test-sidecar', followUpClient: { postMessage } });
     assign('builder-1', 's-b1');
     assign('builder-2', 's-b2');
 
@@ -94,7 +94,7 @@ describe('SwarmCommandBar', () => {
 
   it('Status report broadcasts a canned prompt to all live sessions', async () => {
     const postMessage = vi.fn().mockResolvedValue(undefined);
-    setLiveServer({ baseUrl: 'http://x', token: 't', followUpClient: { postMessage } });
+    setLiveServer({ sidecarId: 'test-sidecar', followUpClient: { postMessage } });
     assign('builder-1', 's-b1');
 
     const el = mount();

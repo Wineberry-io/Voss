@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-keymap-overrides"
+description = "Enables the load_keymap_overrides command without any pre-configured scope."
+commands.allow = ["load_keymap_overrides"]
+
+[[permission]]
+identifier = "deny-load-keymap-overrides"
+description = "Denies the load_keymap_overrides command without any pre-configured scope."
+commands.deny = ["load_keymap_overrides"]

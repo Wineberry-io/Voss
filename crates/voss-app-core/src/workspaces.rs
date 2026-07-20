@@ -3,7 +3,7 @@
 //! Fail-safe loads never block app startup: missing, corrupt, or unsupported
 //! index files yield a single default project-less workspace.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +26,7 @@ pub struct WorkspacesIndex {
 }
 
 /// One workspace tab's persisted metadata. Pane tree + scrollback live in
-/// per-workspace session files (project: `.voss/session.json`, project-less:
-/// `~/.config/voss-app/sessions/<id>.json`).
+/// per-workspace session files under private app data.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceEntry {
@@ -44,8 +43,7 @@ pub struct WorkspaceEntry {
 }
 
 impl WorkspaceEntry {
-    /// Project workspaces persist under `<projectPath>/.voss/session.json`;
-    /// project-less workspaces use `~/.config/voss-app/sessions/<id>.json`.
+    /// All workspace sessions use `~/.config/voss-app/sessions/<id>.json`.
     pub fn is_project_less(&self) -> bool {
         self.project_path.is_none()
     }
@@ -220,11 +218,7 @@ pub fn list_workspaces() -> Vec<WorkspaceEntry> {
 
 /// Resolve the on-disk session path for a workspace entry.
 pub fn workspace_session_path(entry: &WorkspaceEntry) -> PathBuf {
-    if let Some(ref project) = entry.project_path {
-        crate::session::session_path(Path::new(project))
-    } else {
-        crate::session::project_less_session_path(&entry.id)
-    }
+    crate::session::session_path(&entry.id)
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +417,11 @@ mod tests {
     // --- session path resolution -------------------------------------------
 
     #[test]
-    fn workspace_session_path_project_uses_voss_session_json() {
+    fn workspace_session_path_project_uses_private_app_data() {
+        let dir = isolate_index();
+        crate::session::TEST_PROJECT_LESS_SESSIONS_DIR.with(|p| {
+            *p.borrow_mut() = Some(dir.path().join("sessions"));
+        });
         let entry = WorkspaceEntry {
             id: "repo".into(),
             name: "Repo".into(),
@@ -435,7 +433,7 @@ mod tests {
         };
         assert_eq!(
             workspace_session_path(&entry),
-            PathBuf::from("/ws/.voss/session.json")
+            dir.path().join("sessions/repo.json")
         );
     }
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-voss-serve"
+description = "Enables the start_voss_serve command without any pre-configured scope."
+commands.allow = ["start_voss_serve"]
+
+[[permission]]
+identifier = "deny-start-voss-serve"
+description = "Denies the start_voss_serve command without any pre-configured scope."
+commands.deny = ["start_voss_serve"]

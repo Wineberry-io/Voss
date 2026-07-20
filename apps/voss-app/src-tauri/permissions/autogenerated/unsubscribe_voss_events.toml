@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-unsubscribe-voss-events"
+description = "Enables the unsubscribe_voss_events command without any pre-configured scope."
+commands.allow = ["unsubscribe_voss_events"]
+
+[[permission]]
+identifier = "deny-unsubscribe-voss-events"
+description = "Denies the unsubscribe_voss_events command without any pre-configured scope."
+commands.deny = ["unsubscribe_voss_events"]
