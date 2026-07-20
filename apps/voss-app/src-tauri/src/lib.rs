@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use voss_app_core::agent_registry::{
     get_active_agents as registry_get_active_agents, global_registry_path, mark_stopped,
     open_registry, register_agent, registry_path, sweep_orphans, update_last_seen_all, AgentEntry,
@@ -32,6 +32,9 @@ use voss_app_core::sidecar::{
 use voss_app_core::themes::{self, CustomThemeFile};
 use voss_app_core::workspaces::{self, WorkspacesIndex};
 use voss_app_core::{PtyEvent, PtyRegistry};
+
+#[cfg(test)]
+mod command_manifest;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct CustomAgent {
@@ -139,6 +142,31 @@ struct VossServeEntry {
 type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServeEntry>>>;
 type VossStreamTasks = Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>;
 type VossStreamMap<'a> = tauri::State<'a, VossStreamTasks>;
+
+const ORCHESTRATION_WINDOW_LABEL: &str = "orchestration";
+const ORCHESTRATION_CONTEXT_EVENT: &str = "voss://orchestration-context";
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OrchestrationContext {
+    cwd: String,
+    initial_view: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    card_id: Option<String>,
+}
+
+#[derive(Default)]
+struct OrchestrationWindowState {
+    context: Mutex<Option<OrchestrationContext>>,
+}
+
+fn require_orchestration_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() == ORCHESTRATION_WINDOW_LABEL {
+        Ok(())
+    } else {
+        Err("operation is not available from this window".to_string())
+    }
+}
 
 fn ensure_registry<'a>(
     db: &'a Mutex<AgentRegistryMap>,
@@ -1514,6 +1542,76 @@ fn authorize_sidecar_cwd(cwd: &str, index: &WorkspacesIndex) -> Result<PathBuf, 
     Ok(canonical)
 }
 
+fn normalize_orchestration_view(view: Option<String>) -> String {
+    match view.as_deref() {
+        Some("swarm-map" | "memory" | "review") => view.unwrap(),
+        _ => "review".to_string(),
+    }
+}
+
+#[tauri::command]
+async fn open_orchestration_console(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    cwd: String,
+    initial_view: Option<String>,
+    card_id: Option<String>,
+) -> Result<(), String> {
+    let root = authorize_sidecar_cwd(&cwd, &workspaces::load_workspaces_index())?;
+    let context = OrchestrationContext {
+        cwd: root.to_string_lossy().into_owned(),
+        initial_view: normalize_orchestration_view(initial_view),
+        card_id,
+    };
+    *state
+        .context
+        .lock()
+        .map_err(|_| "could not open orchestration console".to_string())? =
+        Some(context.clone());
+
+    if let Some(window) = app.get_webview_window(ORCHESTRATION_WINDOW_LABEL) {
+        window
+            .show()
+            .and_then(|_| window.set_focus())
+            .map_err(|_| "could not focus orchestration console".to_string())?;
+        app.emit_to(
+            ORCHESTRATION_WINDOW_LABEL,
+            ORCHESTRATION_CONTEXT_EVENT,
+            context,
+        )
+        .map_err(|_| "could not update orchestration console".to_string())?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        ORCHESTRATION_WINDOW_LABEL,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Voss Orchestration")
+    .inner_size(1180.0, 760.0)
+    .min_inner_size(800.0, 500.0)
+    .decorations(false)
+    .transparent(true)
+    .build()
+    .map_err(|_| "could not open orchestration console".to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_orchestration_context(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+) -> Result<OrchestrationContext, String> {
+    require_orchestration_window(&window)?;
+    state
+        .context
+        .lock()
+        .map_err(|_| "could not read orchestration context".to_string())?
+        .clone()
+        .ok_or_else(|| "orchestration context is unavailable".to_string())
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SidecarHandle {
@@ -1648,6 +1746,12 @@ async fn call_voss_sidecar(
         .map_err(|_| "sidecar client unavailable".to_string())?;
     let root = root.to_string_lossy().into_owned();
 
+    if let SidecarOperation::CreateSwarm { goal, builders, .. } = &operation {
+        if goal.is_empty() || goal.len() > 1_048_576 || *builders == 0 || *builders > 32 {
+            return Err("invalid swarm request".to_string());
+        }
+    }
+
     let request = match operation {
         SidecarOperation::CreateSession => client
             .post(sidecar_url(handshake.port, &["session"])?)
@@ -1668,15 +1772,20 @@ async fn call_voss_sidecar(
             session_id,
             text,
             mode,
-        } => client
-            .post(sidecar_url(
-                handshake.port,
-                &["session", &session_id, "message"],
-            )?)
-            .json(&serde_json::json!({
-                "mode": mode,
-                "parts": [{"type": "text", "text": text}],
-            })),
+        } => {
+            if !matches!(mode.as_str(), "plan" | "edit" | "auto") || text.len() > 1_048_576 {
+                return Err("invalid sidecar message".to_string());
+            }
+            client
+                .post(sidecar_url(
+                    handshake.port,
+                    &["session", &session_id, "message"],
+                )?)
+                .json(&serde_json::json!({
+                    "mode": mode,
+                    "parts": [{"type": "text", "text": text}],
+                }))
+        }
         SidecarOperation::AbortSession { session_id } => client.post(sidecar_url(
             handshake.port,
             &["session", &session_id, "abort"],
@@ -1694,13 +1803,21 @@ async fn call_voss_sidecar(
             session_id,
             id,
             choice,
-        } => client
-            .post(sidecar_url(
-                handshake.port,
-                &["session", &session_id, "permission"],
-            )?)
-            .json(&serde_json::json!({"v": 1, "id": id, "choice": choice})),
+        } => {
+            if !matches!(choice.as_str(), "a" | "A" | "d" | "y" | "n") {
+                return Err("invalid permission choice".to_string());
+            }
+            client
+                .post(sidecar_url(
+                    handshake.port,
+                    &["session", &session_id, "permission"],
+                )?)
+                .json(&serde_json::json!({"v": 1, "id": id, "choice": choice}))
+        }
         SidecarOperation::Memory { query, top_k } => {
+            if top_k == 0 || top_k > 100 {
+                return Err("invalid memory result limit".to_string());
+            }
             let mut url = sidecar_url(handshake.port, &["memory"])?;
             {
                 let mut query_pairs = url.query_pairs_mut();

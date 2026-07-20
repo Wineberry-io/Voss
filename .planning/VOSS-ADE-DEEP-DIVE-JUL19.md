@@ -832,8 +832,10 @@ Closed in the first containment slice:
 - the unused arbitrary environment-read and swarm-file-write Tauri commands were removed, eliminating that task-filename traversal path;
 - external CLI work is committed to a preserved `candidate_ready` branch/worktree/head, never auto-merged or force-cleaned, and a retry cannot erase an existing candidate;
 - candidate events now flow through Python contracts, the generated Rust SDK, server SSE adaptation, and the Solid live store.
+- sidecar bearer tokens, loopback ports, base URLs, and canonical roots now remain in Rust; JavaScript receives only an opaque sidecar ID and uses an allowlisted operation proxy plus Tauri-channel SSE forwarding;
+- the production CSP no longer permits arbitrary localhost ports or direct Anthropic connections from the webview.
 
-Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, Rust-held sidecar tokens and opaque capabilities, scoped Tauri permissions/CSP hardening, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. Exact registered-root matching is an incremental boundary, not a complete defense against a compromised webview while workspace mutation remains broadly invokable.
+Still open before the Phase 0 exit gate: app-data migration for private session state, raw custom launch contracts, real control wiring, incremental OSC parsing, background failure events, command-level Tauri permissions, honest sandbox labels, the capability matrix, cross-session neutral-mode tests, and the manual terminal soak. The opaque sidecar proxy removes raw credentials, arbitrary endpoints, and caller-supplied roots from JavaScript, but a compromised main webview can still invoke the legitimate operations granted to that window until command permissions are split by capability/surface.
 
 ### Phase 1: Extract engine boundaries and prove tmux
 
