@@ -28,7 +28,7 @@ and plan names; no split-prefix requirement namespace remains active.
 - [x] **BOS-DATA-01**: Voss specifies a point-in-time-correct engineering event schema covering tasks, sessions, swarm events, files, reviews, CI, validation, deploys, and incidents. ✓ BOS3-01
 - [x] **BOS-DATA-06**: Voss projects existing `SessionRecord`, `RunRecord`, and swarm JSONL events into BOS event-schema dictionaries without mutating source records. ✓ BOS3 runtime projection
 - [x] **BOS-DATA-07**: Voss persists projected BOS events in a local append-only ledger with duplicate-safe replay, filters, and torn-line tolerance. ✓ BOS3 local ledger
-- [ ] **BOS-DATA-02**: Voss specifies a decision ledger for task-to-agent, autonomy band, review depth, validation depth, escalation, and no-action decisions.
+- [x] **BOS-DATA-02**: Voss specifies a decision ledger for task-to-agent, autonomy band, review depth, validation depth, escalation, and no-action decisions. ✓ BOS4-01..05
 - [ ] **BOS-DATA-03**: Voss specifies outcome labels for clean merge, rework, revert, failed validation, escaped defect, incident, cycle time, and human override.
 - [ ] **BOS-DATA-04**: Voss specifies reward and guardrail metrics before any learning system is introduced.
 - [ ] **BOS-DATA-05**: Voss specifies offline-evaluation requirements for heuristic policies, contextual bandits, and later RL policies.
@@ -246,7 +246,7 @@ M7 promotes the missing names so private-path drift stops binding callers.
 | BOS-PROD-01..04, BOS-PLAN-01..04 | BOS1 | Active |
 | BOS-ARCH-01..04, BOS-PROD-04 | BOS2 | Active |
 | BOS-DATA-01, BOS-DATA-06, BOS-DATA-07 | BOS3 | Active; runtime projection and local ledger implemented |
-| BOS-DATA-02 | BOS4 | Active; schema exists, runtime work next |
+| BOS-DATA-02 | BOS4 | Complete; schema, writer/builders, swarm assignment, and human permission verdict producers shipped |
 | BOS-DATA-03..05 | BOS5 | Active |
 | BOS-GOV-01..04 | BOS6 | Active |
 | BOS-PROD-04, BOS-SWARM-04, BOS-WORK-03 | BOS7 | Active |

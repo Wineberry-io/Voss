@@ -197,6 +197,7 @@ def test_permissions_py_signature_unchanged() -> None:
         "scope_prompt_fn",
         "project_policy",
         "allow_net",  # network-permission gate (added post-M9-05)
+        "cwd",  # BOS4 decision-ledger root; unrelated to this bridge
         # V12 safety overlay (552cd00) — irreversible-operation validation;
         # added by the safety phase, not this bridge.
         "safety_policy",

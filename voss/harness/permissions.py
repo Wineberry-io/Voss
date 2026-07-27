@@ -34,7 +34,11 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from uuid import uuid4
 
+from portalocker.exceptions import LockException
+
+from .bos_decisions import append_decision, build_as_of, build_verdict_record
 from .cognition_schemas import PermissionsConfig, SafetyConfig
 from .safety import (
     SafetyActorContext,
@@ -212,6 +216,8 @@ class PermissionGate:
     safety_policy: Optional[SafetyConfig] = None  # .voss/safety.yml
     safety_actor: Optional[SafetyActorContext] = None  # role/model-tier context
     safety_confirm_fn: Optional[Callable] = None  # injected for tests; SafetyConfirmRequest -> str
+    # Explicit decision-ledger root; falls back to store.cwd when available.
+    cwd: Path | None = field(default=None, kw_only=True)
 
     def needs_prompt(self, tool_name: str, *, is_mutating: bool = False) -> bool:
         if self.auto_yes:
@@ -318,8 +324,9 @@ class PermissionGate:
             return False, why
 
         # CTRL-08: diff preview for ALL mutating writes, regardless of scope.
+        diff_summary = ""
         if tool_name in WRITE:
-            self._render_diff_preview(tool_name, args)
+            diff_summary = self._render_diff_preview(tool_name, args)
 
         # Scope check for writes — only if an edit_scope is attached.
         if self.edit_scope is not None and tool_name in WRITE:
@@ -347,7 +354,12 @@ class PermissionGate:
             sig = self.signature(tool_name, args)
             if sig in self.store.always:
                 return True, "remembered"
-        return self._prompt(tool_name, args)
+        return self._prompt(
+            tool_name,
+            args,
+            is_mutating=is_mutating,
+            diff_summary=diff_summary,
+        )
 
     def _safety_check(self, tool_name: str, args: dict) -> tuple[bool, str] | None:
         """V12 safety overlay. Returns:
@@ -410,22 +422,33 @@ class PermissionGate:
         # Matched but no actionable route (e.g. runbook field unexpectedly None).
         return False, "safety: factory operation requires a runbook; none configured"
 
-    def _render_diff_preview(self, tool_name: str, args: dict) -> None:
+    def _render_diff_preview(self, tool_name: str, args: dict) -> str:
         """Render a unified diff to stderr before applying a write (CTRL-08).
 
         Scope-independent: runs for every fs_write / fs_edit. Resolves the
-        target against `edit_scope.cwd` if set, else the process cwd.
+        target against `edit_scope.cwd`, explicit `cwd`, `store.cwd`, or the
+        process cwd, in that order.
         Failure (file unreadable, encoding error) is swallowed silently —
         diff preview is best-effort and must not block the gate.
+
+        Returns a non-sensitive summary when a diff was rendered.
         """
-        base_dir = self.edit_scope.cwd if self.edit_scope is not None else Path(".")
+        if self.edit_scope is not None:
+            base_dir = self.edit_scope.cwd
+        elif self.cwd is not None:
+            base_dir = self.cwd
+        elif self.store is not None:
+            base_dir = self.store.cwd
+        else:
+            base_dir = Path(".")
         diff = compute_diff_text(tool_name, args, base_dir)
         if not diff:
-            return
+            return ""
         sys.stderr.write("\n  diff preview:\n")
         for line in diff.splitlines():
             sys.stderr.write(f"    {line}\n")
         sys.stderr.flush()
+        return f"{tool_name} diff preview rendered"
 
     def _prompt_expand(self, target: str) -> tuple[bool, str]:
         """Prompt: expand scope to include <target>? [y/once/always/n]."""
@@ -439,7 +462,14 @@ class PermissionGate:
             return True, "always"
         return False, "denied"
 
-    def _prompt(self, tool_name: str, args: dict) -> tuple[bool, str]:
+    def _prompt(
+        self,
+        tool_name: str,
+        args: dict,
+        *,
+        is_mutating: bool = False,
+        diff_summary: str = "",
+    ) -> tuple[bool, str]:
         # An injected prompt_fn (server permission bridge, TUI bridge, tests)
         # must be consulted even without a TTY — same contract as
         # _prompt_expand below. Only the interactive fallback needs stdin.
@@ -448,12 +478,45 @@ class PermissionGate:
         prompt = self.prompt_fn or _interactive_prompt
         choice = prompt(tool_name, args)
         if choice == "a":
-            return True, "allowed once"
-        if choice == "A":
+            allowed, reason = True, "allowed once"
+        elif choice == "A":
             if self.store is not None:
                 self.store.remember(self.signature(tool_name, args))
-            return True, "allowed always"
-        return False, "denied"
+            allowed, reason = True, "allowed always"
+        else:
+            allowed, reason = False, "denied"
+
+        # Inline human-verdict emission (D-R01/D-R04): only post-prompt answers.
+        ledger_cwd = self.cwd
+        if ledger_cwd is None and self.store is not None:
+            ledger_cwd = self.store.cwd
+        if ledger_cwd is not None:
+            try:
+                record = build_verdict_record(
+                    decision_id=f"dec-perm-{uuid4().hex}",
+                    verdict="approve" if allowed else "dismiss",
+                    actor_id="operator",
+                    feature_snapshot={
+                        "tool_name": tool_name,
+                        "is_mutating": is_mutating,
+                        "mode": self.mode,
+                        "signature": self.signature(tool_name, args),
+                        "diff_summary": diff_summary,
+                    },
+                    entity_ref={},
+                    as_of=build_as_of(
+                        ledger_cwd / ".voss" / "bos" / "events.jsonl"
+                    ),
+                    reason=f"permission prompt: {tool_name}",
+                    rationale=(
+                        f"permission gate verdict for {tool_name} in mode {self.mode}"
+                    ),
+                    autonomy_band="",
+                )
+                append_decision(ledger_cwd, record)
+            except (OSError, ValueError, LockException):
+                pass
+        return allowed, reason
 
 
 def _interactive_safety_confirm(req: "SafetyConfirmRequest") -> str:
