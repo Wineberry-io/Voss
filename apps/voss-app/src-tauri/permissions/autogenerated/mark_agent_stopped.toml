@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mark-agent-stopped"
+description = "Enables the mark_agent_stopped command without any pre-configured scope."
+commands.allow = ["mark_agent_stopped"]
+
+[[permission]]
+identifier = "deny-mark-agent-stopped"
+description = "Denies the mark_agent_stopped command without any pre-configured scope."
+commands.deny = ["mark_agent_stopped"]

@@ -597,7 +597,13 @@ def create_app(token: str | None = None) -> FastAPI:
         return {
             "v": 1,
             "sessions": [
-                {"id": s.id, "cwd": str(s.cwd), "model": s.model, "title": s.title, "busy": s.busy}
+                {
+                    "id": s.id,
+                    "cwd": str(s.cwd),
+                    "model": s.model,
+                    "title": s.title,
+                    "busy": s.busy,
+                }
                 for s in mgr.list()
             ],
         }
@@ -624,7 +630,14 @@ def create_app(token: str | None = None) -> FastAPI:
     @app.get("/session/{session_id}")
     def get_session(session_id: str) -> dict:
         s = _require(session_id)
-        return {"v": 1, "id": s.id, "cwd": str(s.cwd), "model": s.model, "title": s.title, "busy": s.busy}
+        return {
+            "v": 1,
+            "id": s.id,
+            "cwd": str(s.cwd),
+            "model": s.model,
+            "title": s.title,
+            "busy": s.busy,
+        }
 
     @app.delete("/session/{session_id}", status_code=204)
     def delete_session(session_id: str) -> None:
@@ -795,9 +808,7 @@ def create_app(token: str | None = None) -> FastAPI:
             if provider is None:
                 raise HTTPException(400, f"no usable credentials ({res.detail})")
             model = _effective_model(role.model, res)
-            sess = mgr.create(
-                cwd=cwd, model=model, provider=provider, title=role.name
-            )
+            sess = mgr.create(cwd=cwd, model=model, provider=provider, title=role.name)
             sess.swarm_id = swarm.id
             sess.swarm_role = role.name
             if role.name.startswith("builder"):
@@ -943,6 +954,27 @@ def create_app(token: str | None = None) -> FastAPI:
                         path=", ".join(paths) if paths else ev.get("path"),
                     ),
                 )
+            elif etype == "swarm.candidate_ready":
+                _emit_swarm_event(
+                    swarm_id,
+                    E.SwarmCandidateReady(
+                        swarm_id=swarm_id,
+                        task_id=ev.get("task_id", ""),
+                        role=ev.get("role", ""),
+                        branch=ev.get("branch", ""),
+                        worktree=ev.get("worktree", ""),
+                        head=ev.get("head", ""),
+                        summary=ev.get("summary"),
+                    ),
+                )
+            elif etype == "swarm.candidates_ready":
+                _emit_swarm_event(
+                    swarm_id,
+                    E.SwarmCandidatesReady(
+                        swarm_id=swarm_id,
+                        candidate_count=ev.get("candidate_count", 0),
+                    ),
+                )
             elif etype == "swarm.complete":
                 _emit_swarm_event(
                     swarm_id,
@@ -958,7 +990,7 @@ def create_app(token: str | None = None) -> FastAPI:
     @app.post("/swarm/{swarm_id}/run", status_code=202)
     async def run_swarm(swarm_id: str) -> dict:
         """Drive the R3 CLI members of a swarm (worktree spawn + ownership +
-        fan-in) headlessly. Native roles are untouched — they run via the
+        candidate preservation) headlessly. Native roles are untouched — they run via the
         in-process turn path. Fire-and-forget: the orchestrator streams progress
         over the swarm SSE plane; the route returns immediately."""
         store = app.state.swarm_store

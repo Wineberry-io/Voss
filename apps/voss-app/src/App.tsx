@@ -36,7 +36,7 @@ import AttentionPanel from './org/attention/AttentionPanel';
 import { attentionQueue } from './org/attention/attentionQueue';
 import { registerTerminalCard } from './org/model/bridge';
 import { resolveTier, hookCapableCli } from './org/capabilityTier';
-import RunCommandBar, {
+import {
   dispatchRunSpec,
   type RunNativeClient,
   type SpawnAgentFn,
@@ -44,7 +44,7 @@ import RunCommandBar, {
 import type { RunMode } from './org/cockpit/runIntake';
 import { liveLabel } from './org/live/sseClient';
 import {
-  buildVossClientFromHandshake,
+  buildVossClientFromHandle,
   type BuiltVossClient,
 } from './org/live/vossClientBuild';
 import { startVossServe } from './org/live/sidecarClient';
@@ -59,7 +59,6 @@ import {
   setOpenInGridRequest,
   openInReviewRequest,
   setOpenInReviewRequest,
-  setSelectedCardId,
 } from './org/selection';
 import BoardSummaryStrip from './components/BoardSummaryStrip';
 import { collectLeaves } from './grid/tree';
@@ -96,6 +95,10 @@ import { createPrefixMode } from './command-palette/prefixMode';
 import { setAsAppMenu } from './command-palette/nativeMenu';
 import { showToast } from './command-palette/toast';
 import { applyWindowEffects } from './appearance/windowEffects';
+import {
+  openOrchestrationConsole,
+  type OrchestrationView,
+} from './orchestration/window';
 import { buildQuickOpenItems } from './command-palette/quickOpen';
 import type {
   ActiveLayout,
@@ -486,23 +489,21 @@ export default function App() {
     const existing = vossClient();
     if (existing && vossClientCwd === cwd) return existing;
     devlog('info', 'sidecar.serve', 'start_voss_serve', { cwd });
-    let handshake;
+    let handle;
     try {
-      handshake = await startVossServe(cwd);
+      handle = await startVossServe(cwd);
     } catch (e) {
       devlog('error', 'sidecar.serve', 'start_voss_serve failed', e);
       throw e;
     }
-    // T-V15-10: log the port only — the token is never logged or stringified.
-    devlog('info', 'sidecar.serve', 'handshake ok', { port: handshake.port });
-    const built = buildVossClientFromHandshake(handshake);
+    devlog('info', 'sidecar.serve', 'sidecar ready');
+    const built = buildVossClientFromHandle(handle);
     vossClientCwd = cwd;
     setVossClient(built);
     // Expose the live server to prop-less surfaces (swarm snapshot fetch +
     // command-bar directing) — token rides the Authorization header only.
     setLiveServer({
-      baseUrl: built.baseUrl,
-      token: built.token,
+      sidecarId: built.sidecarId,
       cwd,
       followUpClient: built.followUpClient,
     });
@@ -604,12 +605,10 @@ export default function App() {
       const built = await ensureVossClient(cwd);
       let r: { id: string };
       try {
-        devlog('info', 'run.native', 'POST /session', { baseUrl: built.baseUrl });
+        devlog('info', 'run.native', 'create session');
         r = await built.runNativeClient.createSession(spec);
       } catch (e) {
-        // "Load failed" surfaces here when the webview blocks the loopback
-        // fetch (CSP connect-src) or the server lacks CORS for the webview
-        // origin (cross-origin localhost:5173 -> 127.0.0.1:port preflight).
+        // Rust owns the loopback credential and maps proxy failures back here.
         devlog('error', 'run.native', 'createSession fetch failed', e);
         throw e;
       }
@@ -621,8 +620,7 @@ export default function App() {
       // pane and start the turn.
       openNativePane({
         sessionId: r.id,
-        baseUrl: built.baseUrl,
-        token: built.token,
+        sidecarId: built.sidecarId,
       });
       // createSession only mints an IDLE session — the goal must be POSTed as
       // the first message to actually start a turn (server `_run_turn`). Sent
@@ -668,8 +666,7 @@ export default function App() {
   createEffect(() => {
     const cardId = openInReviewRequest();
     if (!cardId) return;
-    setSelectedCardId(cardId);
-    setActiveView('review');
+    void openConsole('review', cardId);
     setOpenInReviewRequest(null);
   });
 
@@ -922,8 +919,35 @@ export default function App() {
     return ws?.project()?.path ?? ws?.projectLessCwd();
   };
 
+  const openConsole = async (
+    view: OrchestrationView = 'review',
+    cardId?: string,
+  ): Promise<void> => {
+    const cwd = activeMounted()?.project()?.path;
+    if (!cwd) {
+      showToast('warning', 'Open a project workspace to use Voss orchestration.');
+      return;
+    }
+    try {
+      await openOrchestrationConsole(cwd, view, cardId);
+    } catch (cause) {
+      showToast(
+        'error',
+        cause instanceof Error ? cause.message : 'Could not open Voss orchestration.',
+      );
+    }
+  };
+
+  const navigatePortal = (view: PortalView): void => {
+    if (view === 'review' || view === 'swarm-map' || view === 'memory') {
+      void openConsole(view);
+      return;
+    }
+    setActiveView(view);
+  };
+
   const saveCurrentLayout = async (
-    path: string,
+    workspaceId: string,
     name: string,
   ): Promise<void> => {
     const ctrl = gridController();
@@ -931,16 +955,16 @@ export default function App() {
     if (!ctrl || !ws) return;
     const snap = ctrl.snapshot();
     const file = serializeLayout(snap.root, snap.focusedId, ws.activeLayout());
-    await saveLayout(path, name, file);
+    await saveLayout(workspaceId, name, file);
   };
 
   const loadLayoutByName = async (
-    path: string,
+    workspaceId: string,
     name: string,
   ): Promise<void> => {
     const ctrl = gridController();
     if (!ctrl) return;
-    const file = await loadLayout(path, name);
+    const file = await loadLayout(workspaceId, name);
     ctrl.applyLoadedLayout(file);
   };
 
@@ -953,9 +977,9 @@ export default function App() {
         const info = await openProject(record.projectPath);
         const agentConfigs = await fetchAgentConfigs(info.path);
         let session: SessionFile | null = null;
-        session = await loadSession(info.path).catch(() => null);
+        session = await loadSession(record.id).catch(() => null);
         if (!session) {
-          const layout = await loadDefaultLayout(info.path).catch(() => null);
+          const layout = await loadDefaultLayout(record.id).catch(() => null);
           if (layout) {
             session = layoutToSession(layout, false);
           }
@@ -1005,17 +1029,17 @@ export default function App() {
       setRecents(await listRecents());
       const agentConfigs = await fetchAgentConfigs(info.path);
 
-      let session: SessionFile | null = await loadSession(info.path).catch(
+      let session: SessionFile | null = await loadSession(workspaceId).catch(
         () => null,
       );
       if (!session && layoutName) {
-        const layout = await loadLayout(info.path, layoutName).catch(() => null);
+        const layout = await loadLayout(workspaceId, layoutName).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
       }
       if (!session) {
-        const layout = await loadDefaultLayout(info.path).catch(() => null);
+        const layout = await loadDefaultLayout(workspaceId).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
@@ -1048,10 +1072,13 @@ export default function App() {
       const info = await openProject(path);
       setRecents(await listRecents());
 
+      workspaceStore.setProjectPath(ws.id, info.path);
+      await workspaceStore.persist();
+
       let session: SessionFile | null = null;
-      session = await loadSession(info.path).catch(() => null);
+      session = await loadSession(ws.id).catch(() => null);
       if (!session) {
-        const layout = await loadDefaultLayout(info.path).catch(() => null);
+        const layout = await loadDefaultLayout(ws.id).catch(() => null);
         if (layout) {
           session = layoutToSession(layout, false);
         }
@@ -1070,7 +1097,6 @@ export default function App() {
         ws.setProjectLessAccepted(true);
         ws.setEverMounted(true);
       });
-      workspaceStore.setProjectPath(ws.id, info.path);
       void installWorkspaceKeymap(info.path);
     } catch (e) {
       console.error(errorPrefix, e);
@@ -1118,6 +1144,7 @@ export default function App() {
       accentColor: payload.accentColor,
     });
     const ws = ensureMountedRecord(record.id);
+    await workspaceStore.persist();
     if (payload.folderPath) {
       await bootstrapWorkspaceProject(
         ws,
@@ -1126,7 +1153,6 @@ export default function App() {
         payload.layoutName,
       );
     }
-    void workspaceStore.persist();
   };
 
   const handleStartEmptyWorkspace = async (
@@ -1259,9 +1285,9 @@ export default function App() {
 
   const openPalette = (mode: 'quick' | 'full') => {
     setPaletteMode(mode);
-    const path = workspacePath();
-    if (mode === 'quick' && path) {
-      void listLayouts(path)
+    const id = activeId();
+    if (mode === 'quick' && id && activeMounted()?.project()) {
+      void listLayouts(id)
         .then(setLayoutNames)
         .catch(() => setLayoutNames([]));
     }
@@ -1275,10 +1301,10 @@ export default function App() {
   const handlePaletteExecute = (id: string) => {
     if (id.startsWith('layout:')) {
       const name = id.slice('layout:'.length);
-      const path = workspacePath();
+      const workspaceId = activeId();
       const ctrl = gridController();
-      if (path && ctrl) {
-        void loadLayoutByName(path, name);
+      if (workspaceId && ctrl) {
+        void loadLayoutByName(workspaceId, name);
       }
     } else if (id.startsWith('recent:')) {
       const path = id.slice('recent:'.length);
@@ -1326,13 +1352,13 @@ export default function App() {
     openFullPalette: () => openPalette('full'),
     openProject: () => void handleOpenFolder(),
     saveLayout: () => {
-      const path = workspacePath();
-      if (!path) return;
+      const id = activeId();
+      if (!id || !activeMounted()?.project()) return;
       const name = window.prompt('Save layout as');
       const trimmed = name?.trim();
       if (!trimmed) return;
-      void saveCurrentLayout(path, trimmed)
-        .then(() => listLayouts(path))
+      void saveCurrentLayout(id, trimmed)
+        .then(() => listLayouts(id))
         .then(setLayoutNames)
         .catch((e) => console.error('save_layout failed:', e));
     },
@@ -1444,18 +1470,18 @@ export default function App() {
       return;
     }
 
-    // Cmd+Shift+O: toggle the grid ↔ Review surface (grid stays mounted via display:none)
+    // Cmd+Shift+O: open the separately privileged orchestration console.
     if (e.metaKey && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
-      setActiveView((p) => (p === 'grid' ? 'review' : 'grid'));
+      void openConsole('review');
       e.preventDefault();
       e.stopImmediatePropagation();
       return;
     }
 
-    // Cmd+K: toggle the global "Ask Voss to…" composer (V24-04). metaKey only,
-    // no shift/alt — distinct from the ⌘1-9 pane shortcuts and ⌘⇧/⌘⌥ chords.
+    // Cmd+K opens the optional Voss console; the terminal renderer never
+    // receives sidecar authority.
     if (e.metaKey && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
-      setComposerOpen((open) => !open);
+      void openConsole('review');
       e.preventDefault();
       e.stopImmediatePropagation();
       return;
@@ -1467,7 +1493,7 @@ export default function App() {
       const idx = Number(e.key) - 1;
       const item = PORTAL_ITEMS[idx];
       if (item) {
-        setActiveView(item.id);
+        navigatePortal(item.id);
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
@@ -1598,7 +1624,7 @@ export default function App() {
         ).toUpperCase()}
         liveState={liveLabel()}
         currentSafetyMode={currentSafetyMode()}
-        onOpenComposer={() => setComposerOpen(true)}
+        onOpenComposer={() => void openConsole('review')}
       />
       <div
         style={{
@@ -1632,12 +1658,12 @@ export default function App() {
         >
           <PortalRail
             activeView={activeView()}
-            onNavTo={setActiveView}
+            onNavTo={navigatePortal}
             expanded={portalExpanded()}
             onToggleExpanded={togglePortalExpanded}
             activeLayout={activeMounted()?.activeLayout() ?? 'custom'}
             onLayoutSelect={onLayoutSelect}
-            onOpenComposer={() => setComposerOpen(true)}
+            onOpenComposer={() => void openConsole('review')}
           />
           <AgentSidebar
             collapsed={sidebarCollapsed()}
@@ -1661,13 +1687,6 @@ export default function App() {
           {/* Work-surface column: D-03 always-on RunCommandBar strip ABOVE the
               grid/cockpit swap — present in BOTH Live Work and Run Review. */}
           <div style={{ flex: '1', 'min-height': '0', 'min-width': '0', display: 'flex', 'flex-direction': 'column', position: 'relative' }}>
-          <RunCommandBar
-            cwd={workspacePath() ?? ''}
-            cliBinary="voss"
-            client={runBarNativeClient}
-            resolvePaneId={runBarResolvePaneId}
-            spawnAgent={runBarSpawnAgent}
-          />
           <WorkspaceTabBar
             class="workspace-tabbar--grid"
             workspaces={workspaceStore.workspaces()}
@@ -1687,7 +1706,7 @@ export default function App() {
                 container is display:none in Run Review, where the cockpit
                 shows the full board). Renders nothing until a run snapshot
                 is loaded. Chip click = opt-in jump to Run Review. */}
-            <BoardSummaryStrip onOpen={() => setActiveView('review')} />
+            <BoardSummaryStrip onOpen={() => void openConsole('review')} />
             <For each={workspaceIds()}>
               {(workspaceId) => {
                 const ws = () => mountedById().get(workspaceId);
@@ -1772,12 +1791,12 @@ export default function App() {
               OrgViewShell (lazy thunk → only built when active). */}
           <PortalShell
             activeView={activeView()}
-            onNavTo={setActiveView}
+            onNavTo={navigatePortal}
             projectName={activeMounted()?.project()?.name ?? ''}
             projectPath={activeMounted()?.project()?.path ?? null}
             gitBranch={activeMounted()?.project()?.gitBranch ?? null}
             onNewSession={handleNewWorkspace}
-            onNewTask={() => setComposerOpen(true)}
+            onNewTask={() => void openConsole('review')}
             contextSlot={() => {
               const id = focusedPaneId();
               return (
@@ -1812,9 +1831,7 @@ export default function App() {
             }}
             memorySlot={() => (
               <MemorySurface
-                baseUrl={vossClient()?.baseUrl}
-                token={vossClient()?.token}
-                cwd={workspacePath() ?? undefined}
+                sidecarId={vossClient()?.sidecarId}
               />
             )}
             reviewSlot={() => (
@@ -1831,16 +1848,14 @@ export default function App() {
                     ensureClient: async (cwd) => {
                       const built = await ensureVossClient(cwd);
                       return {
-                        baseUrl: built.baseUrl,
-                        token: built.token,
+                        sidecarId: built.sidecarId,
                         client: built.client,
                       };
                     },
                     openAttachedPane: (r) =>
                       openNativePane({
                         sessionId: r.sessionId,
-                        baseUrl: r.baseUrl,
-                        token: r.token,
+                        sidecarId: r.sidecarId,
                       }),
                   })
                 }
@@ -1864,7 +1879,7 @@ export default function App() {
           budgetLimit={runBudgetTotals().limit}
           onToggleSidebar={toggleSidebar}
           orgViewOpen={activeView() !== 'grid'}
-          onToggleOrgView={() => setActiveView((p) => (p === 'grid' ? 'review' : 'grid'))}
+          onToggleOrgView={() => void openConsole('review')}
           attentionCount={attentionQueue().length}
           attentionBlocking={attentionBlocking()}
           onToggleAttention={() => setAttentionOpen((p) => !p)}

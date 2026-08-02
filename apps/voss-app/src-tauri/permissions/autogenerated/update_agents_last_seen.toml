@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-agents-last-seen"
+description = "Enables the update_agents_last_seen command without any pre-configured scope."
+commands.allow = ["update_agents_last_seen"]
+
+[[permission]]
+identifier = "deny-update-agents-last-seen"
+description = "Denies the update_agents_last_seen command without any pre-configured scope."
+commands.deny = ["update_agents_last_seen"]

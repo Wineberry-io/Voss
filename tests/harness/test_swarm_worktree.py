@@ -5,6 +5,7 @@ Real temp git repos throughout (mirrors tests/harness/test_layout.py's `_git`
 edits and untracked new files, and fan-in merge bringing a member's change back
 to the main checkout's HEAD.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -13,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from voss.harness.swarm_worktree import (
+    CandidateExistsError,
     MemberWorktree,
     NotAGitRepoError,
     WorktreeMergeConflict,
@@ -25,7 +27,9 @@ from voss.harness.swarm_worktree import (
 
 
 def _git(args: list[str], cwd: Path) -> None:
-    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True
+    )
 
 
 @pytest.fixture()
@@ -54,11 +58,10 @@ class TestCreate:
         # The worktree is a real checkout: the committed base file is present.
         assert (mw.path / "base.txt").read_text() == "base\n"
 
-    def test_create_is_recoverable_after_crash(self, repo: Path) -> None:
-        # A second create for the same role must not fail on a leftover.
+    def test_create_preserves_existing_candidate(self, repo: Path) -> None:
         create_member_worktree(repo, SWARM, "builder-1")
-        mw2 = create_member_worktree(repo, SWARM, "builder-1")
-        assert mw2.path.is_dir()
+        with pytest.raises(CandidateExistsError):
+            create_member_worktree(repo, SWARM, "builder-1")
 
     def test_not_a_git_repo_raises(self, tmp_path: Path) -> None:
         plain = tmp_path / "plain"
@@ -144,7 +147,8 @@ class TestMerge:
         # HEAD is clean — the abort left no in-progress merge.
         status = subprocess.run(
             ["git", "-C", str(repo), "status", "--porcelain"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert "UU" not in status.stdout
 
@@ -159,7 +163,8 @@ class TestRemove:
         # The branch is gone too.
         branches = subprocess.run(
             ["git", "-C", str(repo), "branch", "--list", mw.branch],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         assert branches.stdout.strip() == ""
 

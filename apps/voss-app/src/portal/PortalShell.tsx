@@ -34,7 +34,7 @@ export interface PortalShellProps {
    *  when 'context' is active; App owns the focused-pane ContextData it needs. */
   contextSlot?: () => JSX.Element;
   /** Lazy slot for the Memory surface. Thunk so App can pass the live server
-   *  baseUrl/token/cwd off vossClient(); falls back to a prop-less MemorySurface. */
+   *  the opaque sidecar handle off vossClient(); falls back to MemorySurface. */
   memorySlot?: () => JSX.Element;
   /** Overview surface header — project identity + session/task actions. */
   projectName?: string;

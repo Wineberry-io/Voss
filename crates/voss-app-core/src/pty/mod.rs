@@ -140,12 +140,7 @@ pub fn spawn_session(
         .unwrap_or("sh")
         .to_string();
 
-    let mut cmd = CommandBuilder::new(&shell);
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
-    // Signal to child Voss processes that they are running inside the ADE.
-    // The Python renderer checks this to skip compact-only overrides.
-    cmd.env("VOSS_EMBEDDED", "1");
+    let mut cmd = neutral_terminal_command(&shell);
     let cwd_path = match cwd {
         Some(c) => {
             cmd.cwd(&c);
@@ -209,10 +204,8 @@ pub fn spawn_command_session_with_env(
         .unwrap_or(cmd_binary)
         .to_string();
 
-    let mut cmd = CommandBuilder::new(cmd_binary);
+    let mut cmd = neutral_terminal_command(cmd_binary);
     cmd.args(cmd_args);
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
     for (key, value) in env {
         cmd.env(key, value);
     }
@@ -242,6 +235,18 @@ pub fn spawn_command_session_with_env(
     });
 
     Ok((session, reader, pause_rx))
+}
+
+fn neutral_terminal_command(program: &str) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(program);
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("VOSS_") {
+            cmd.env_remove(key);
+        }
+    }
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
+    cmd
 }
 
 /// VCKP-13a managed-launch wrap hook: spawn a command under the OS

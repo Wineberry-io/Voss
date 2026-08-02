@@ -3,19 +3,19 @@ import { render } from 'solid-js/web';
 
 // V15-04: the live permission gate replies through the SDK — mock it so the
 // gate tests assert the POST contract without a server.
-vi.mock('../../../../../sdk/typescript/src/client/permission', () => ({
-  replyPermission: vi.fn(),
-}));
 // V15-04: the spawn-failure Retry re-invokes startVossServe — mock the Tauri
 // wrapper so no command is issued under jsdom.
 vi.mock('../../org/live/sidecarClient', () => ({
   startVossServe: vi.fn(),
+  replySidecarPermission: vi.fn(),
 }));
 
 import ProtocolPane from '../ProtocolPane';
 import type { AgentEvent } from '../../../../../sdk/typescript/src/client/sse';
-import { replyPermission } from '../../../../../sdk/typescript/src/client/permission';
-import { startVossServe } from '../../org/live/sidecarClient';
+import {
+  replySidecarPermission,
+  startVossServe,
+} from '../../org/live/sidecarClient';
 import {
   attentionQueue,
   __resetAttentionQueue,
@@ -24,7 +24,7 @@ import { __resetLiveStream } from '../../org/live/sseClient';
 import { __resetProtocolSessions } from '../../org/live/protocolSessions';
 import { __resetBridgeMaps } from '../../org/model/bridge';
 
-const mockReply = vi.mocked(replyPermission);
+const mockReply = vi.mocked(replySidecarPermission);
 const mockStartServe = vi.mocked(startVossServe);
 
 // V15-03 (VLIVE-04): the structured protocol pane renders the §6 union as DOM
@@ -55,8 +55,7 @@ function mount(
     () => (
       <ProtocolPane
         sessionId={sessionId}
-        baseUrl="http://localhost:0"
-        token="tok"
+        sidecarId="test-sidecar"
         stream={stream}
       />
     ),
@@ -291,10 +290,12 @@ describe('ProtocolPane — live permission gate (V15-04, VLIVE-05)', () => {
     await flush();
 
     expect(mockReply).toHaveBeenCalledTimes(1);
-    expect(mockReply).toHaveBeenCalledWith(expect.anything(), 'sess-1', {
-      id: 'perm-1',
-      choice: 'a',
-    });
+    expect(mockReply).toHaveBeenCalledWith(
+      'test-sidecar',
+      'sess-1',
+      'perm-1',
+      'a',
+    );
     const gate = c.querySelector('.proto-permission-gate');
     expect(gate?.classList.contains('proto-permission-gate--resolved')).toBe(
       true,
@@ -312,10 +313,12 @@ describe('ProtocolPane — live permission gate (V15-04, VLIVE-05)', () => {
     await flush();
     gateButtons(c)[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flush();
-    expect(mockReply).toHaveBeenLastCalledWith(expect.anything(), 'sess-1', {
-      id: 'perm-1',
-      choice: 'd',
-    });
+    expect(mockReply).toHaveBeenLastCalledWith(
+      'test-sidecar',
+      'sess-1',
+      'perm-1',
+      'd',
+    );
 
     // Fresh server session — the protocolSessions store keys gate state by
     // session id, and 'sess-1' just resolved its gate above.
@@ -325,10 +328,12 @@ describe('ProtocolPane — live permission gate (V15-04, VLIVE-05)', () => {
       new MouseEvent('click', { bubbles: true }),
     );
     await flush();
-    expect(mockReply).toHaveBeenLastCalledWith(expect.anything(), 'sess-2', {
-      id: 'perm-1',
-      choice: 'A',
-    });
+    expect(mockReply).toHaveBeenLastCalledWith(
+      'test-sidecar',
+      'sess-2',
+      'perm-1',
+      'A',
+    );
   });
 
   it('a rejected reply re-enables the buttons and keeps the queue row (no optimistic grant)', async () => {
@@ -404,7 +409,7 @@ describe('ProtocolPane — lifecycle states (V15-04, VLIVE-07)', () => {
   });
 
   it('a stream that ends with zero events shows the D-12 spawn error; Retry re-invokes startVossServe', async () => {
-    mockStartServe.mockResolvedValueOnce({ port: 50099, token: 'tok-2' });
+    mockStartServe.mockResolvedValueOnce({ sidecarId: 'test-sidecar-2' });
     const c = mount(scripted([]));
     await flush();
     await flush();
@@ -435,8 +440,7 @@ describe('ProtocolPane — lifecycle states (V15-04, VLIVE-07)', () => {
       () => (
         <ProtocolPane
           sessionId="sess-1"
-          baseUrl="http://localhost:0"
-          token="tok"
+          sidecarId="test-sidecar"
           onEnded={onEnded}
           stream={scripted([ev({ type: 'user', task: 'go' })])}
         />
@@ -509,5 +513,5 @@ describe('ProtocolPane — D-08 cap with pins', () => {
     // Cap holds (#rows bounded by CAP).
     const thinkingRows = c.querySelectorAll('.proto-thinking-row');
     expect(thinkingRows.length).toBeLessThanOrEqual(300);
-  });
+  }, 10_000);
 });

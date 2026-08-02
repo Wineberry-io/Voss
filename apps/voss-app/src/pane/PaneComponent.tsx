@@ -65,8 +65,7 @@ export interface PaneProps {
   /** V15-03 (VLIVE-04): native server session — when set, the pane body is a
    *  structured ProtocolPane and NO PTY is spawned (discriminator). */
   nativeSessionId?: string;
-  nativeBaseUrl?: string;
-  nativeToken?: string;
+  nativeSidecarId?: string;
 }
 
 function basename(p: string): string {
@@ -543,8 +542,7 @@ export default function PaneComponent(props: PaneProps) {
       >
         <ProtocolPane
           sessionId={props.nativeSessionId!}
-          baseUrl={props.nativeBaseUrl!}
-          token={props.nativeToken!}
+          sidecarId={props.nativeSidecarId!}
           onEnded={() => {
             // D-11: ProtocolPane renders its own inline ended banner — the
             // header dot reflects the state; no absolute PTY ExitBanner here.

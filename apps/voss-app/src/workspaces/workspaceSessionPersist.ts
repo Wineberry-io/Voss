@@ -46,7 +46,7 @@ async function saveWorkspaceSession(
   );
 
   if (ctx.projectPath) {
-    await saveSession(ctx.projectPath, session);
+    await saveSession(ctx.workspaceId, session);
   } else {
     await saveProjectLessSession(ctx.workspaceId, session);
   }

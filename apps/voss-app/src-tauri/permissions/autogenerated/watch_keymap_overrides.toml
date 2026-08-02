@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watch-keymap-overrides"
+description = "Enables the watch_keymap_overrides command without any pre-configured scope."
+commands.allow = ["watch_keymap_overrides"]
+
+[[permission]]
+identifier = "deny-watch-keymap-overrides"
+description = "Denies the watch_keymap_overrides command without any pre-configured scope."
+commands.deny = ["watch_keymap_overrides"]

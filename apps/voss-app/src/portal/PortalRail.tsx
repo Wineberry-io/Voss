@@ -24,7 +24,7 @@ import Network from 'lucide-solid/icons/network';
 import PanelLeftClose from 'lucide-solid/icons/panel-left-close';
 import PanelLeftOpen from 'lucide-solid/icons/panel-left-open';
 import Settings from 'lucide-solid/icons/settings';
-import { PORTAL_ITEMS, type PortalView } from './portalTypes';
+import { PORTAL_ITEMS, type PortalItem, type PortalView } from './portalTypes';
 import PresetSwitcher from '../components/titlebar/PresetSwitcher';
 import type { ActiveLayout, LayoutPreset } from '../grid/layoutPresets';
 import './portal.css';
@@ -39,6 +39,7 @@ export interface PortalRailProps {
   activeLayout?: ActiveLayout;
   layoutDisabled?: boolean;
   onLayoutSelect?: (preset: LayoutPreset) => void;
+  items?: readonly PortalItem[];
 }
 
 const PORTAL_ICONS: Record<PortalView, typeof LayoutGrid> = {
@@ -73,7 +74,7 @@ const PortalRail: Component<PortalRailProps> = (props) => {
         </Show>
       </button>
       <div class="portal-tablist" role="tablist" aria-orientation="vertical">
-        <For each={PORTAL_ITEMS}>
+        <For each={props.items ?? PORTAL_ITEMS}>
           {(item) => {
             const Icon = PORTAL_ICONS[item.id];
 

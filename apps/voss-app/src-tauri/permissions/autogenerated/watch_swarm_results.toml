@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watch-swarm-results"
+description = "Enables the watch_swarm_results command without any pre-configured scope."
+commands.allow = ["watch_swarm_results"]
+
+[[permission]]
+identifier = "deny-watch-swarm-results"
+description = "Denies the watch_swarm_results command without any pre-configured scope."
+commands.deny = ["watch_swarm_results"]

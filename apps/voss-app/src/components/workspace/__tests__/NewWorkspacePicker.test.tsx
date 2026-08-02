@@ -88,8 +88,6 @@ describe('NewWorkspacePicker — Start empty', () => {
 describe('NewWorkspacePicker — Open folder', () => {
   it('Open folder picks a directory and enables Create workspace', async () => {
     h.pickFolder.mockResolvedValueOnce('/tmp/my-project');
-    h.listLayouts.mockResolvedValueOnce(['default']);
-
     const onCreate = vi.fn();
     const el = mount(() => (
       <NewWorkspacePicker
@@ -109,7 +107,7 @@ describe('NewWorkspacePicker — Open folder', () => {
       ),
     );
     expect(h.pickFolder).toHaveBeenCalledTimes(1);
-    expect(h.listLayouts).toHaveBeenCalledWith('/tmp/my-project');
+    expect(h.listLayouts).not.toHaveBeenCalled();
 
     const createBtn = el.querySelector(
       '[data-new-workspace-create]',
@@ -121,7 +119,7 @@ describe('NewWorkspacePicker — Open folder', () => {
       name: 'my-project',
       accentColor: 'blue',
       folderPath: '/tmp/my-project',
-      layoutName: 'default',
+      layoutName: null,
     });
   });
 });

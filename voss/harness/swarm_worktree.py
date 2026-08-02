@@ -22,6 +22,7 @@ holds no global state, and never reads `.voss` — the file-bus lives in the MAI
 checkout and the host hands members their task inline, so worktrees stay
 hermetic.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -31,6 +32,10 @@ from pathlib import Path
 
 class NotAGitRepoError(RuntimeError):
     """`repo_root` is not inside a git work tree, so no worktree can be added."""
+
+
+class CandidateExistsError(RuntimeError):
+    """A preserved candidate already occupies this swarm role."""
 
 
 class WorktreeMergeConflict(RuntimeError):
@@ -66,7 +71,10 @@ def _git(repo: Path, *args: str) -> str:
     )
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, ["git", "-C", str(repo), *args], result.stdout, result.stderr
+            result.returncode,
+            ["git", "-C", str(repo), *args],
+            result.stdout,
+            result.stderr,
         )
     return result.stdout.strip()
 
@@ -98,8 +106,9 @@ def create_member_worktree(
 
     The branch (`swarm/<swarm_id>/<role_name>`) is created off the current HEAD,
     so every member starts from the same base and fan-in is a straightforward
-    merge back into HEAD. Idempotent-ish: a stale worktree/branch from a crashed
-    prior run is removed first so re-creation does not fail on `already exists`.
+    merge back into HEAD. A pre-existing worktree or branch is treated as a
+    preserved candidate and must be handled explicitly before this role is run
+    again; automatic cleanup could destroy unreviewed work.
     """
     repo_root = repo_root.resolve()
     _require_repo(repo_root)
@@ -108,11 +117,11 @@ def create_member_worktree(
     wt_path = _worktrees_dir(repo_root, swarm_id) / role_name
     wt_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Clean up any leftovers from a previous (possibly crashed) run so the add
-    # below is deterministic rather than failing on a pre-existing path/branch.
-    if wt_path.exists():
-        _safe_remove_worktree(repo_root, wt_path)
-    _safe_delete_branch(repo_root, branch)
+    branch_exists = bool(_git(repo_root, "branch", "--list", branch))
+    if wt_path.exists() or branch_exists:
+        raise CandidateExistsError(
+            f"candidate already exists for swarm {swarm_id!r} role {role_name!r}"
+        )
 
     _git(repo_root, "worktree", "add", "-b", branch, str(wt_path), "HEAD")
     return MemberWorktree(path=wt_path.resolve(), branch=branch, role=role_name)

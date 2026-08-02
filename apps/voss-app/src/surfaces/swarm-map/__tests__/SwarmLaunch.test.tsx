@@ -78,7 +78,7 @@ describe('SwarmLaunch', () => {
   });
 
   it('spawns the server on launch, then launches the orchestra', async () => {
-    const srv: LiveServer = { baseUrl: 'http://127.0.0.1:9', token: 't', cwd: '/repo' };
+    const srv: LiveServer = { sidecarId: 'test-sidecar', cwd: '/repo' };
     // Connector mimics ensureVossClient: side-effect sets the live server.
     setLiveServerConnector(async () => setLiveServer(srv));
     launchSwarmMock.mockResolvedValue(undefined);

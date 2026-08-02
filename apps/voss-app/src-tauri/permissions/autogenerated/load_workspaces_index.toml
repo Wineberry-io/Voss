@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-workspaces-index"
+description = "Enables the load_workspaces_index command without any pre-configured scope."
+commands.allow = ["load_workspaces_index"]
+
+[[permission]]
+identifier = "deny-load-workspaces-index"
+description = "Denies the load_workspaces_index command without any pre-configured scope."
+commands.deny = ["load_workspaces_index"]

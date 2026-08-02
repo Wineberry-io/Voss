@@ -17,7 +17,7 @@
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import type { RunData } from '../types';
 import type { SwarmReconcileResult } from '../swarmReconcile';
-import type { VossClient } from '../../../../../sdk/typescript/src/client/rest';
+import type { SidecarVossClient } from '../live/sidecarClient';
 import { rosterRows, type RosterRow } from '../panels/RosterPanel';
 import { cardToPane } from '../model/bridge';
 import SessionTreePanel from '../panels/SessionTreePanel';
@@ -73,7 +73,7 @@ export default function CockpitSidebar(props: {
   swarm: SwarmReconcileResult;
   /** V15-05: live sidecar client — the "Server sessions" section is hidden
    *  entirely without it (nothing to list). */
-  vossClient?: VossClient;
+  vossClient?: SidecarVossClient;
   /** V15-05: Attach action → App attachSession/openAttachedPane seam. */
   onAttach?: (sessionId: string) => void;
 }) {
