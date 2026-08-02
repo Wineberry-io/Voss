@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: Behavioral OS Implementation Track
 status: completed
-last_updated: "2026-06-20T22:55:14.842Z"
-last_activity: 2026-06-20
+last_updated: "2026-07-27T00:59:51Z"
+last_activity: 2026-07-26
 progress:
   total_phases: 63
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 24
-  completed_plans: 23
-  percent: 6
+  completed_plans: 24
+  percent: 8
 ---
 
 # State: Voss
@@ -24,10 +24,10 @@ See: `.planning/PROJECT.md` (updated 2026-06-20)
 
 ## Current Position
 
-**Phase:** BOS4 — Decision Ledger Runtime.
-**Plan:** BOS4 runtime replanning is next after BOS track reconciliation.
-**Status:** BOS track restart complete; ready to discuss/research/plan BOS4 runtime work
-**Last activity:** 2026-06-20
+**Phase:** BOS5 — Outcome Labels and Reward Inputs.
+**Plan:** BOS5-01 complete and verified; BOS5-02 validation artifacts present.
+**Status:** BOS-DATA-03/04 complete; BOS5-03 offline-evaluation contract is next.
+**Last activity:** 2026-07-26
 **Seed context:** `SEED-001-coordination-bus` remains future external-agent context only; BOS must wrap the existing server/SSE swarm plane rather than create a parallel file bus.
 **Swarm context:** V25 server-native swarm is the first ADE/swarm event source to map into BOS decision/outcome data.
 **Carry-forward context:** BOS3 event projection and local event ledger are implemented with tests. Split-prefix tracks are no longer active.
@@ -39,8 +39,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-20)
 | BOS1 | Scope, Wedge, and Track Reconciliation | Complete as 2026-06-20 track restart; source docs retained |
 | BOS2 | Runtime Architecture and Boundaries | Source docs exist; replan before further execution |
 | BOS3 | Engineering Event Schema and Projection Runtime | Schema, projection runtime, and local event ledger implemented with tests |
-| BOS4 | Decision Ledger Runtime | Schema exists; runtime replanning is next |
-| BOS5 | Outcome Labels and Reward Inputs | Pending |
+| BOS4 | Decision Ledger Runtime | Complete (5/5 plans; schema, writer/builders, swarm assignment, and human permission verdict producers) |
+| BOS5 | Outcome Labels and Reward Inputs | In progress (BOS5-01/02 complete; BOS5-03..05 pending) |
 | BOS6 | Privacy and Governance Enforcement | Pending |
 | BOS7 | Web and Control-Plane Boundary | Pending |
 | BOS8 | Team, Project, and Work Model | Pending |

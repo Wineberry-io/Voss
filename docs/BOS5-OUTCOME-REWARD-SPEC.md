@@ -179,7 +179,7 @@ BOS5 defines metric + threshold shape + role; it does NOT build enforcement mech
 
 ## 7. Versioning & migration notes
 
-**Schema versioning (mirror PROTOCOL.md `v` + migration-note convention, as BOS3/BOS4 adopted).**
+**Schema versioning (mirrors the `v` + migration-note convention adopted by BOS3/BOS4).**
 
 `schema_version = 1` (`v: const 1` on every variant).
 
@@ -187,7 +187,7 @@ BOS5 defines metric + threshold shape + role; it does NOT build enforcement mech
   - New `label_type` filling a reserved slot.
   - New `measure_type` in the measure family.
   - New reward objective via a new `WeightSetRecord` version (not a schema change).
-  - New horizon name (additive; `horizon` is an open list, not a fixed enum).
+  - New horizon name added to the enum (additive schema extension; no version bump).
   - New `scalarization` name (e.g. first wiring of `chebyshev` or `epsilon_constrained`).
 - **Breaking changes (bump the version + add a migration note here):**
   - Altering an existing enum value (e.g. renaming `clean_merge`).
