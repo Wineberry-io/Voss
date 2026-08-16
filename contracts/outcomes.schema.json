@@ -5,8 +5,15 @@
   "description": "BOS5 outcome label, measure, reward, and guardrail contract (BOS-DATA-03, BOS-DATA-04). Sibling to contracts/events.schema.json; mirrors its discriminated-union pattern ($defs + discriminator.mapping + oneOf). v: 1. Defines: (1) a bitemporal, no-leakage outcome-event envelope shared by every categorical label and measure record; (2) the 7 categorical label variants discriminated on label_type; (3) the continuous measure family discriminated on measure_type (cycle_time now, additive later); (4) the RewardRecord (computed/derived, append-only, MAY carry decision_id); (5) the versioned team-level WeightSetRecord (per decision_type); (6) the GuardrailMetricSpec (tension-pair counter-metric, hard_gate|dashboard). Outcome labels NEVER carry decision_id/recommended_action (no-leakage, BOS4 D-04 carried); outcome labels join to decisions later by entity_id + as-of. RewardRecord is the only record family here that carries decision_id, because a reward is computed FOR a decision after the fact.",
   "$comment": "schema_version=1; additive changes (new label_type filling a reserved slot, new measure_type, new reward objective via a new weight-set version, new horizon name, new scalarization name) do NOT bump this version; breaking changes (altering an existing enum value, removing a required field, renaming a discriminator) increment the version and require a migration note in docs/BOS5-OUTCOME-REWARD-SPEC.md.",
   "type": "object",
-  "properties": {
-    "categorical_label": {
+  "oneOf": [
+    {"$ref": "#/$defs/CategoricalOutcomeEvent"},
+    {"$ref": "#/$defs/OutcomeMeasureEvent"},
+    {"$ref": "#/$defs/RewardRecord"},
+    {"$ref": "#/$defs/WeightSetRecord"},
+    {"$ref": "#/$defs/GuardrailMetricSpec"}
+  ],
+  "$defs": {
+    "CategoricalOutcomeEvent": {
       "title": "CategoricalLabel",
       "description": "Categorical outcome label event. Discriminated union over label_type (D-04 closed enum, 7 variants). Each variant composes the OutcomeEnvelope (bitemporal + no-leakage). Append-only over the entity lifecycle (D-05); may carry supersedes_outcome_id to point at an earlier label it revises (D-02).",
       "discriminator": {
@@ -31,7 +38,7 @@
         {"$ref": "#/$defs/HumanOverrideLabel"}
       ]
     },
-    "outcome_measure": {
+    "OutcomeMeasureEvent": {
       "title": "OutcomeMeasure",
       "description": "Continuous outcome measure event. Discriminated union over measure_type. cycle_time now; additional measure_type variants are additive (no version bump). Each variant composes the OutcomeEnvelope.",
       "discriminator": {
@@ -44,17 +51,6 @@
         {"$ref": "#/$defs/CycleTimeMeasure"}
       ]
     },
-    "reward_record": {
-      "$ref": "#/$defs/RewardRecord"
-    },
-    "weight_set": {
-      "$ref": "#/$defs/WeightSetRecord"
-    },
-    "guardrail_metric_spec": {
-      "$ref": "#/$defs/GuardrailMetricSpec"
-    }
-  },
-  "$defs": {
     "OutcomeEnvelope": {
       "title": "OutcomeEnvelope",
       "description": "Shared envelope composed by EVERY categorical label and measure record. Bitemporal (event_time valid time + ingest_time transaction time, ingest_time >= event_time) per BOS3 D-02. Carries the BOS3 entity anchor (entity_id + entity_type) per D-03, the trace_id, the obs_window_id (named observation window per D-02, referenced not hard-coded per Pitfall 4), and source_rule (the D-01 derivation rule id that produced this outcome). supersedes_outcome_id is OPTIONAL (D-02/D-05 supersession pointer). NO decision reference and NO recommended_action field here: outcome labels never reference the BOS4 decision record; the join runs decision -> outcome by entity_id + as-of (BOS4 D-04 no-leakage guard carried).",
@@ -131,8 +127,7 @@
         "ingest_time",
         "obs_window_id",
         "source_rule"
-      ],
-      "additionalProperties": false
+      ]
     },
     "CleanMergeLabel": {
       "title": "CleanMergeLabel",
@@ -160,7 +155,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "ReworkLabel": {
       "title": "ReworkLabel",
@@ -197,7 +192,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "RevertLabel": {
       "title": "RevertLabel",
@@ -224,7 +219,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "FailedValidationLabel": {
       "title": "FailedValidationLabel",
@@ -251,7 +246,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "EscapedDefectLabel": {
       "title": "EscapedDefectLabel",
@@ -288,7 +283,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "IncidentLabel": {
       "title": "IncidentLabel",
@@ -325,7 +320,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "HumanOverrideLabel": {
       "title": "HumanOverrideLabel",
@@ -352,7 +347,7 @@
         "label_type",
         "v"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "CycleTimeMeasure": {
       "title": "CycleTimeMeasure",
@@ -398,7 +393,7 @@
         "unit",
         "measure_definition_id"
       ],
-      "additionalProperties": false
+      "unevaluatedProperties": false
     },
     "RewardRecord": {
       "title": "RewardRecord",
@@ -583,7 +578,8 @@
           },
           "required": [
             "type",
-            "window_days"
+            "window_days",
+            "max_value"
           ],
           "additionalProperties": false
         }
