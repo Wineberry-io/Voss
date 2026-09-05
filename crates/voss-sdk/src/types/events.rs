@@ -442,6 +442,9 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"$ref\": \"#/components/schemas/PrinciplesOverflow\""]
 #[doc = "    },"]
 #[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/InstructionsOverflow\""]
+#[doc = "    },"]
+#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/components/schemas/WarningEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -455,6 +458,21 @@ pub struct ConfidenceUpdated {
 #[doc = "    },"]
 #[doc = "    {"]
 #[doc = "      \"$ref\": \"#/components/schemas/GateUpdated\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmAssign\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmWorkerDone\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmGate\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmNeedsOperator\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmComplete\""]
 #[doc = "    }"]
 #[doc = "  ],"]
 #[doc = "  \"discriminator\": {"]
@@ -467,6 +485,7 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"confidence.updated\": \"#/components/schemas/ConfidenceUpdated\","]
 #[doc = "      \"final\": \"#/components/schemas/FinalEvent\","]
 #[doc = "      \"gate.updated\": \"#/components/schemas/GateUpdated\","]
+#[doc = "      \"instructions_overflow\": \"#/components/schemas/InstructionsOverflow\","]
 #[doc = "      \"permission.updated\": \"#/components/schemas/PermissionUpdated\","]
 #[doc = "      \"plan\": \"#/components/schemas/PlanEvent\","]
 #[doc = "      \"principles_overflow\": \"#/components/schemas/PrinciplesOverflow\","]
@@ -476,6 +495,11 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"status\": \"#/components/schemas/StatusEvent\","]
 #[doc = "      \"stream.delta\": \"#/components/schemas/StreamDelta\","]
 #[doc = "      \"stream.finalize\": \"#/components/schemas/StreamFinalize\","]
+#[doc = "      \"swarm.assign\": \"#/components/schemas/SwarmAssign\","]
+#[doc = "      \"swarm.complete\": \"#/components/schemas/SwarmComplete\","]
+#[doc = "      \"swarm.gate\": \"#/components/schemas/SwarmGate\","]
+#[doc = "      \"swarm.needs_operator\": \"#/components/schemas/SwarmNeedsOperator\","]
+#[doc = "      \"swarm.worker_done\": \"#/components/schemas/SwarmWorkerDone\","]
 #[doc = "      \"thinking\": \"#/components/schemas/ThinkingEvent\","]
 #[doc = "      \"tool\": \"#/components/schemas/ToolEvent\","]
 #[doc = "      \"user\": \"#/components/schemas/UserEvent\","]
@@ -521,6 +545,8 @@ pub enum AgentEvent {
     CognitionOverflow(CognitionOverflow),
     #[serde(rename = "principles_overflow")]
     PrinciplesOverflow(PrinciplesOverflow),
+    #[serde(rename = "instructions_overflow")]
+    InstructionsOverflow(InstructionsOverflow),
     #[serde(rename = "warning")]
     WarningEvent(WarningEvent),
     #[serde(rename = "probable")]
@@ -531,6 +557,16 @@ pub enum AgentEvent {
     ConfidenceUpdated(ConfidenceUpdated),
     #[serde(rename = "gate.updated")]
     GateUpdated(GateUpdated),
+    #[serde(rename = "swarm.assign")]
+    SwarmAssign(SwarmAssign),
+    #[serde(rename = "swarm.worker_done")]
+    SwarmWorkerDone(SwarmWorkerDone),
+    #[serde(rename = "swarm.gate")]
+    SwarmGate(SwarmGate),
+    #[serde(rename = "swarm.needs_operator")]
+    SwarmNeedsOperator(SwarmNeedsOperator),
+    #[serde(rename = "swarm.complete")]
+    SwarmComplete(SwarmComplete),
 }
 impl ::std::convert::From<ServerConnected> for AgentEvent {
     fn from(value: ServerConnected) -> Self {
@@ -612,6 +648,11 @@ impl ::std::convert::From<PrinciplesOverflow> for AgentEvent {
         Self::PrinciplesOverflow(value)
     }
 }
+impl ::std::convert::From<InstructionsOverflow> for AgentEvent {
+    fn from(value: InstructionsOverflow) -> Self {
+        Self::InstructionsOverflow(value)
+    }
+}
 impl ::std::convert::From<WarningEvent> for AgentEvent {
     fn from(value: WarningEvent) -> Self {
         Self::WarningEvent(value)
@@ -635,6 +676,31 @@ impl ::std::convert::From<ConfidenceUpdated> for AgentEvent {
 impl ::std::convert::From<GateUpdated> for AgentEvent {
     fn from(value: GateUpdated) -> Self {
         Self::GateUpdated(value)
+    }
+}
+impl ::std::convert::From<SwarmAssign> for AgentEvent {
+    fn from(value: SwarmAssign) -> Self {
+        Self::SwarmAssign(value)
+    }
+}
+impl ::std::convert::From<SwarmWorkerDone> for AgentEvent {
+    fn from(value: SwarmWorkerDone) -> Self {
+        Self::SwarmWorkerDone(value)
+    }
+}
+impl ::std::convert::From<SwarmGate> for AgentEvent {
+    fn from(value: SwarmGate) -> Self {
+        Self::SwarmGate(value)
+    }
+}
+impl ::std::convert::From<SwarmNeedsOperator> for AgentEvent {
+    fn from(value: SwarmNeedsOperator) -> Self {
+        Self::SwarmNeedsOperator(value)
+    }
+}
+impl ::std::convert::From<SwarmComplete> for AgentEvent {
+    fn from(value: SwarmComplete) -> Self {
+        Self::SwarmComplete(value)
     }
 }
 #[doc = "OpenAPI schema anchor (H1.14).\n\nForced into the OpenAPI components so a typed client codegens a tagged\nenum over the full event union, even though no route returns it directly."]
@@ -702,6 +768,9 @@ impl ::std::convert::From<GateUpdated> for AgentEvent {
 #[doc = "          \"$ref\": \"#/components/schemas/PrinciplesOverflow\""]
 #[doc = "        },"]
 #[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/InstructionsOverflow\""]
+#[doc = "        },"]
+#[doc = "        {"]
 #[doc = "          \"$ref\": \"#/components/schemas/WarningEvent\""]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -715,6 +784,21 @@ impl ::std::convert::From<GateUpdated> for AgentEvent {
 #[doc = "        },"]
 #[doc = "        {"]
 #[doc = "          \"$ref\": \"#/components/schemas/GateUpdated\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmAssign\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmWorkerDone\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmGate\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmNeedsOperator\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmComplete\""]
 #[doc = "        }"]
 #[doc = "      ],"]
 #[doc = "      \"discriminator\": {"]
@@ -727,6 +811,7 @@ impl ::std::convert::From<GateUpdated> for AgentEvent {
 #[doc = "          \"confidence.updated\": \"#/components/schemas/ConfidenceUpdated\","]
 #[doc = "          \"final\": \"#/components/schemas/FinalEvent\","]
 #[doc = "          \"gate.updated\": \"#/components/schemas/GateUpdated\","]
+#[doc = "          \"instructions_overflow\": \"#/components/schemas/InstructionsOverflow\","]
 #[doc = "          \"permission.updated\": \"#/components/schemas/PermissionUpdated\","]
 #[doc = "          \"plan\": \"#/components/schemas/PlanEvent\","]
 #[doc = "          \"principles_overflow\": \"#/components/schemas/PrinciplesOverflow\","]
@@ -736,6 +821,11 @@ impl ::std::convert::From<GateUpdated> for AgentEvent {
 #[doc = "          \"status\": \"#/components/schemas/StatusEvent\","]
 #[doc = "          \"stream.delta\": \"#/components/schemas/StreamDelta\","]
 #[doc = "          \"stream.finalize\": \"#/components/schemas/StreamFinalize\","]
+#[doc = "          \"swarm.assign\": \"#/components/schemas/SwarmAssign\","]
+#[doc = "          \"swarm.complete\": \"#/components/schemas/SwarmComplete\","]
+#[doc = "          \"swarm.gate\": \"#/components/schemas/SwarmGate\","]
+#[doc = "          \"swarm.needs_operator\": \"#/components/schemas/SwarmNeedsOperator\","]
+#[doc = "          \"swarm.worker_done\": \"#/components/schemas/SwarmWorkerDone\","]
 #[doc = "          \"thinking\": \"#/components/schemas/ThinkingEvent\","]
 #[doc = "          \"tool\": \"#/components/schemas/ToolEvent\","]
 #[doc = "          \"user\": \"#/components/schemas/UserEvent\","]
@@ -849,6 +939,60 @@ pub struct GateUpdated {
     pub decision: ::std::string::String,
     pub gate: ::std::string::String,
     pub session_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`InstructionsOverflow`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"InstructionsOverflow\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"instructions_tokens\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"budget\": {"]
+#[doc = "      \"title\": \"Budget\","]
+#[doc = "      \"default\": 4000,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"instructions_tokens\": {"]
+#[doc = "      \"title\": \"Instructions Tokens\","]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"truncated\": {"]
+#[doc = "      \"title\": \"Truncated\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"instructions_overflow\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"instructions_overflow\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct InstructionsOverflow {
+    #[serde(default = "defaults::default_u64::<i64, 4000>")]
+    pub budget: i64,
+    pub instructions_tokens: i64,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub truncated: ::std::vec::Vec<::std::string::String>,
     #[serde(default = "defaults::default_u64::<i64, 1>")]
     pub v: i64,
 }
@@ -1333,6 +1477,349 @@ pub struct StreamFinalize {
     pub role: ::std::string::String,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub timestamp: ::std::option::Option<::std::string::String>,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmAssign`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmAssign\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"role\","]
+#[doc = "    \"session_id\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_id\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"owned_files\": {"]
+#[doc = "      \"title\": \"Owned Files\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"role\": {"]
+#[doc = "      \"title\": \"Role\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"session_id\": {"]
+#[doc = "      \"title\": \"Session Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_id\": {"]
+#[doc = "      \"title\": \"Task Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.assign\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.assign\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmAssign {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub owned_files: ::std::vec::Vec<::std::string::String>,
+    pub role: ::std::string::String,
+    pub session_id: ::std::string::String,
+    pub swarm_id: ::std::string::String,
+    pub task_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmComplete`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmComplete\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_count\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"summary\": {"]
+#[doc = "      \"title\": \"Summary\","]
+#[doc = "      \"default\": null,"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_count\": {"]
+#[doc = "      \"title\": \"Task Count\","]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.complete\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.complete\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmComplete {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub summary: ::std::option::Option<::std::string::String>,
+    pub swarm_id: ::std::string::String,
+    pub task_count: i64,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmGate`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmGate\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"detail\","]
+#[doc = "    \"gate_type\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_id\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"detail\": {"]
+#[doc = "      \"title\": \"Detail\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"gate_type\": {"]
+#[doc = "      \"title\": \"Gate Type\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_id\": {"]
+#[doc = "      \"title\": \"Task Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.gate\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.gate\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmGate {
+    pub detail: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    pub gate_type: ::std::string::String,
+    pub swarm_id: ::std::string::String,
+    pub task_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmNeedsOperator`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmNeedsOperator\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"session_id\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_id\","]
+#[doc = "    \"tool_name\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"path\": {"]
+#[doc = "      \"title\": \"Path\","]
+#[doc = "      \"default\": null,"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"session_id\": {"]
+#[doc = "      \"title\": \"Session Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_id\": {"]
+#[doc = "      \"title\": \"Task Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"tool_name\": {"]
+#[doc = "      \"title\": \"Tool Name\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.needs_operator\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.needs_operator\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmNeedsOperator {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub path: ::std::option::Option<::std::string::String>,
+    pub session_id: ::std::string::String,
+    pub swarm_id: ::std::string::String,
+    pub task_id: ::std::string::String,
+    pub tool_name: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmWorkerDone`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmWorkerDone\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"session_id\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_id\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"session_id\": {"]
+#[doc = "      \"title\": \"Session Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"summary\": {"]
+#[doc = "      \"title\": \"Summary\","]
+#[doc = "      \"default\": null,"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_id\": {"]
+#[doc = "      \"title\": \"Task Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.worker_done\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.worker_done\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmWorkerDone {
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    pub session_id: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub summary: ::std::option::Option<::std::string::String>,
+    pub swarm_id: ::std::string::String,
+    pub task_id: ::std::string::String,
     #[serde(default = "defaults::default_u64::<i64, 1>")]
     pub v: i64,
 }
