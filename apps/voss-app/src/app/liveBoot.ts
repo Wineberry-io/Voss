@@ -135,11 +135,12 @@ export function createLiveBoot(ws: WorkspaceHost, view: { setActiveView: (v: 'gr
   const runBarResolvePaneId = (): string => {
     const mounted = ws.activeMounted();
     const ctrl = mounted?.gridController;
-    if (!mounted || !ctrl) return crypto.randomUUID();
+    if (!mounted || !ctrl) throw new Error('No workspace is open to place the run in.');
     const before = ctrl.snapshot().focusedId;
     ctrl.splitFocused('H');
     const newId = ctrl.snapshot().focusedId;
-    return newId === before ? crypto.randomUUID() : newId;
+    if (newId === before) throw new Error('Could not open a pane for the run.');
+    return newId;
   };
 
   const runBarSpawnAgent: SpawnAgentFn = async (o) => {

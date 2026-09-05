@@ -14,8 +14,8 @@ use voss_app_core::agent_registry::{
     open_registry, register_agent, registry_path, sweep_orphans, update_last_seen_all, AgentEntry,
 };
 use voss_app_core::appearance::{self, AppearanceSettings};
-use voss_app_core::fonts;
 use voss_app_core::canvas::{self, CanvasState};
+use voss_app_core::fonts;
 use voss_app_core::grid::{self, GridState};
 use voss_app_core::keymap::{self, KeymapOverrideFile, KeymapProfile, KeymapValidationResult};
 use voss_app_core::layouts::{self, LayoutFile};

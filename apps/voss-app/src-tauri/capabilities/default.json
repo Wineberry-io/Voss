@@ -28,6 +28,8 @@
     "allow-sweep-orphan-agents",
     "allow-sync-grid",
     "allow-get-grid",
+    "allow-sync-canvas",
+    "allow-get-canvas",
     "allow-save-layout",
     "allow-load-layout",
     "allow-list-layouts",

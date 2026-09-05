@@ -31,7 +31,9 @@ export type SessionFileV1 = {
 export type SessionFileV2 = {
   version: 2;
   activePreset: LayoutPreset | null;
-  canvas: CanvasState;
+  /** Absent only for files Rust wrote from a legacy tree; `grid` is set then. */
+  canvas?: CanvasState;
+  grid?: GridStore;
   panes: SessionPane[];
   projectLessAccepted: boolean;
 };

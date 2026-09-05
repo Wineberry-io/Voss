@@ -139,12 +139,13 @@ export function createAgentHost(ws: WorkspaceHost) {
   const [activityLog, setActivityLog] = createSignal<
     { id: string; type: 'completion' | 'error'; description: string; timestamp: number }[]
   >([]);
-  let prevAgentPaneIds = new Set<string>();
+  const prevAgentPaneIdsByWorkspace = new Map<string, Set<string>>();
   createEffect(() => {
     const mounted = ws.activeMounted();
     if (!mounted) return;
     const configs = mounted.agentConfigByPaneId();
     const currentIds = new Set(Object.keys(configs));
+    const prevAgentPaneIds = prevAgentPaneIdsByWorkspace.get(mounted.id) ?? new Set<string>();
     for (const id of currentIds) {
       if (!prevAgentPaneIds.has(id)) {
         const cfg = configs[id];
@@ -162,7 +163,7 @@ export function createAgentHost(ws: WorkspaceHost) {
         ]);
       }
     }
-    prevAgentPaneIds = currentIds;
+    prevAgentPaneIdsByWorkspace.set(mounted.id, currentIds);
   });
 
   const runBudgetTotals = createMemo(() => {

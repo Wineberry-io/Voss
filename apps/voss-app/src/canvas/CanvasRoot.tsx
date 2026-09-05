@@ -316,7 +316,7 @@ export default function CanvasRoot(props: {
         n.x = Math.round(start.nx + (ev.clientX - start.x) / z);
         n.y = Math.round(start.ny + (ev.clientY - start.y) / z);
       }));
-      markCanvasDragMove(plain());
+      markCanvasDragMove();
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -342,7 +342,7 @@ export default function CanvasRoot(props: {
       setStore(produce((s) =>
         resizeNode(s, id, start.w + (ev.clientX - start.x) / z, start.h + (ev.clientY - start.y) / z),
       ));
-      markCanvasDragMove(plain());
+      markCanvasDragMove();
     };
     const up = () => {
       window.removeEventListener('pointermove', move);

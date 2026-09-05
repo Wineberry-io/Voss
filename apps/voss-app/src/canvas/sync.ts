@@ -16,14 +16,19 @@ export function markCanvasChange(state: CanvasState): void {
   notifyStructuralChange();
 }
 
-let pendingDrag: CanvasState | null = null;
+let dragInFlight = false;
 
-export function markCanvasDragMove(state: CanvasState): void {
-  pendingDrag = state;
+/** Pointer-move during a drag: nothing is mirrored until the pointer settles. */
+export function markCanvasDragMove(): void {
+  dragInFlight = true;
 }
 
+/** Pointer-up: mirror the caller's settled state exactly once. */
 export function markCanvasDragSettled(state: CanvasState): void {
-  const final = pendingDrag ?? state;
-  pendingDrag = null;
-  markCanvasChange(final);
+  dragInFlight = false;
+  markCanvasChange(state);
+}
+
+export function isCanvasDragInFlight(): boolean {
+  return dragInFlight;
 }

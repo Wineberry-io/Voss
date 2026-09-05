@@ -5,6 +5,9 @@
 import type { ActiveLayout, LayoutPreset } from '../grid/layoutPresets';
 import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile, SessionFileV2, SessionPane } from '../grid/sessionStorage';
+
+/** A v2 file this module wrote: `canvas` is always present. */
+export type CanvasSessionFile = SessionFileV2 & { canvas: CanvasState };
 import type { GridStore, TreeNode } from '../grid/tree';
 import { gridToCanvas } from './migrate';
 import {
@@ -48,6 +51,12 @@ export function cloneCanvas(state: CanvasState): CanvasState {
   };
 }
 
+function sessionGrid(session: SessionFile): GridStore {
+  if (session.version === 1) return session.grid;
+  if (session.grid) return session.grid;
+  throw new Error('session file has neither canvas nor grid');
+}
+
 function resolveFocus(state: CanvasState): string {
   if (state.nodes.some((n) => n.id === state.focusedId)) return state.focusedId;
   return orderedNodes(state)[0]!.id;
@@ -58,7 +67,7 @@ export function buildSessionFile(
   activeLayout: ActiveLayout,
   scrollbackByPaneId: Map<string, string[]>,
   projectLessAccepted: boolean,
-): SessionFileV2 {
+): CanvasSessionFile {
   const canvas = cloneCanvas(state);
   const panes: SessionPane[] = orderedNodes(canvas).map((n) => {
     const lines = scrollbackByPaneId.get(n.id) ?? null;
@@ -76,7 +85,9 @@ export function buildSessionFile(
 /** Load either version. v1 trees become nodes via the migration box. */
 export function applySessionFile(session: SessionFile): CanvasRestoreResult {
   const canvas =
-    session.version === 2 ? cloneCanvas(session.canvas) : gridToCanvas(session.grid);
+    session.version === 2 && session.canvas
+      ? cloneCanvas(session.canvas)
+      : gridToCanvas(sessionGrid(session));
   recomputeIndices(canvas.nodes);
   canvas.focusedId = resolveFocus(canvas);
   const activeLayout: ActiveLayout = session.activePreset
@@ -108,7 +119,7 @@ export function layoutCanvas(layout: LayoutFile): CanvasState {
 export function layoutToSession(
   layout: LayoutFile,
   projectLessAccepted: boolean,
-): SessionFileV2 {
+): CanvasSessionFile {
   const canvas = layoutCanvas(layout);
   return {
     version: 2,
@@ -174,7 +185,7 @@ export function applyLayoutToCanvas(
     if (s && l) {
       next.push({ ...l, x: s.x, y: s.y, w: s.w, h: s.h, z: s.z });
     } else if (s) {
-      next.push({ ...makeNode({ cwd: s.cwd, shell: s.shell, x: s.x, y: s.y, w: s.w, h: s.h }), z: s.z });
+      next.push({ ...makeNode({ kind: s.kind, cwd: s.cwd, shell: s.shell, x: s.x, y: s.y, w: s.w, h: s.h }), z: s.z });
     } else if (l) {
       next.push(l);
     }

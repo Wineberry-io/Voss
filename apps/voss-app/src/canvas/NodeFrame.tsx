@@ -76,6 +76,7 @@ export default function NodeFrame(props: NodeFrameProps) {
       <Show when={props.closeBanner !== null}>
         <NodeCloseBanner
           process={props.closeBanner as string}
+          active={props.focused}
           onConfirm={props.onConfirmClose}
           onKeepOpen={props.onKeepOpen}
         />

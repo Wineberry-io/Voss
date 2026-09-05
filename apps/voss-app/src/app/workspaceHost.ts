@@ -163,6 +163,7 @@ export function createWorkspaceHost(deps: WorkspaceHostDeps) {
   const [newWorkspacePickerOpen, setNewWorkspacePickerOpen] = createSignal(false);
   const [focusedPaneId, setFocusedPaneId] = createSignal<string | undefined>();
   const [paneCount, setPaneCount] = createSignal(0);
+  const [controllerTick, setControllerTick] = createSignal(0);
   let closeSaveUnlisten: (() => void) | undefined;
 
   const activeId = () => workspaceStore.activeId();
@@ -182,7 +183,10 @@ export function createWorkspaceHost(deps: WorkspaceHostDeps) {
     const id = activeId();
     return id ? mountedById().get(id) : undefined;
   });
-  const gridController = () => activeMounted()?.gridController;
+  const gridController = () => {
+    controllerTick();
+    return activeMounted()?.gridController;
+  };
   const workspacePath = () => {
     const ws = activeMounted();
     return ws?.project()?.path ?? ws?.projectLessCwd();
@@ -376,6 +380,7 @@ export function createWorkspaceHost(deps: WorkspaceHostDeps) {
     const ws = mountedById().get(id);
     ws?.sessionCleanup?.();
     if (ws) ws.gridController = undefined;
+    setControllerTick((t) => t + 1);
     setMountedById((prev) => {
       const next = new Map(prev);
       next.delete(id);
@@ -442,6 +447,7 @@ export function createWorkspaceHost(deps: WorkspaceHostDeps) {
 
   const bindController = (ws: MountedWorkspace, c: CanvasController) => {
     ws.gridController = c;
+    setControllerTick((t) => t + 1);
     ws.sessionCleanup?.();
     ws.sessionCleanup = installWorkspaceStructuralAutosave(sessionContextFor(ws));
     if (!ws.orphanSweepDone) {

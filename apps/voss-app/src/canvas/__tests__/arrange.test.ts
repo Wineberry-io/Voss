@@ -40,3 +40,17 @@ describe('arrangements', () => {
     expect(nodes[1].x).toBeGreaterThan(nodes[0].x);
   });
 });
+
+describe('minimum sizes', () => {
+  it('never emits a rect below the terminal floor, even for many nodes in a small box', async () => {
+    const { MIN_NODE_H, MIN_NODE_W } = await import('../model');
+    for (const a of ['fanout', 'pipeline', 'swarm', 'watchers', 'grid'] as const) {
+      for (const n of [1, 5, 20]) {
+        for (const r of arrangeRects(a, n, { w: 400, h: 200 })) {
+          expect(r.w).toBeGreaterThanOrEqual(MIN_NODE_W);
+          expect(r.h).toBeGreaterThanOrEqual(MIN_NODE_H);
+        }
+      }
+    }
+  });
+});

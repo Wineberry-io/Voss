@@ -7,17 +7,20 @@ import { onCleanup, onMount } from 'solid-js';
  */
 export default function NodeCloseBanner(props: {
   process: string;
+  /** Only the focused node's banner answers Enter and Escape. */
+  active: boolean;
   onConfirm: () => void;
   onKeepOpen: () => void;
 }) {
   const onKey = (e: KeyboardEvent) => {
+    if (!props.active) return;
     if (e.key === 'Enter') {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       props.onConfirm();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       props.onKeepOpen();
     }
   };

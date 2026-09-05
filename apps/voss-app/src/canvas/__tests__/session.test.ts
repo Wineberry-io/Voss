@@ -121,3 +121,20 @@ describe('layouts', () => {
     expect(shrunk.canvas.focusedId).toBe('b');
   });
 });
+
+describe('review follow-ups', () => {
+  it('a v2 file with grid but no canvas still loads', () => {
+    const p = makePane({ cwd: '/g', shell: 'sh' });
+    const r = applySessionFile({ version: 2, activePreset: null, grid: { root: p, focusedId: p.id }, panes: [], projectLessAccepted: false });
+    expect(r.canvas.nodes[0].id).toBe(p.id);
+  });
+
+  it('extra layout slots keep the saved node kind', () => {
+    const s = two();
+    s.nodes[1].kind = 'native';
+    const saved = serializeLayout(s, 'custom');
+    const one = createCanvasState({ cwd: '/live' });
+    const r = applyLayoutToCanvas(one, saved);
+    expect(r.canvas.nodes[1].kind).toBe('native');
+  });
+});

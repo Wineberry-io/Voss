@@ -73,7 +73,9 @@ export function createViewRouter(ws: WorkspaceHost) {
     const paneId = openInGridRequest();
     if (!paneId) return;
     setActiveView('grid');
-    ws.gridController()?.focusPaneById(paneId);
+    const ctrl = ws.gridController();
+    if (!ctrl) return;
+    ctrl.focusPaneById(paneId);
     setOpenInGridRequest(null);
   });
 

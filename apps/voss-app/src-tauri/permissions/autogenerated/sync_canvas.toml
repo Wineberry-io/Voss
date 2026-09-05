@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sync-canvas"
+description = "Enables the sync_canvas command without any pre-configured scope."
+commands.allow = ["sync_canvas"]
+
+[[permission]]
+identifier = "deny-sync-canvas"
+description = "Denies the sync_canvas command without any pre-configured scope."
+commands.deny = ["sync_canvas"]
