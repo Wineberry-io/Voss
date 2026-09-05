@@ -91,7 +91,7 @@ describe('SwarmLaunchWizard', () => {
   });
 
   it('launches with an explicit roster carrying the chosen per-role agent/model', async () => {
-    const srv: LiveServer = { baseUrl: 'http://x', token: 't', cwd: '/repo' };
+    const srv: LiveServer = { sidecarId: 'test-sidecar', cwd: '/repo' };
     setLiveServer(srv);
     launchSwarmMock.mockResolvedValue('sw1');
 
@@ -116,7 +116,7 @@ describe('SwarmLaunchWizard', () => {
   });
 
   it('self-connects on launch when not yet connected', async () => {
-    const srv: LiveServer = { baseUrl: 'http://x', token: 't', cwd: '/repo' };
+    const srv: LiveServer = { sidecarId: 'test-sidecar', cwd: '/repo' };
     setLiveServerConnector(async () => setLiveServer(srv));
     launchSwarmMock.mockResolvedValue('sw2');
 

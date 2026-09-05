@@ -7,6 +7,8 @@ import {
   swarmGates,
   swarmOperatorNeeds,
   swarmComplete,
+  swarmCandidateReady,
+  swarmCandidatesReady,
   swarmLiveEdges,
   swarmEventSeq,
   __resetSwarmLive,
@@ -57,6 +59,27 @@ describe('ingestSwarmEvent', () => {
     expect(swarmGates().t2?.gate_type).toBe('reviewer_reject');
     expect(swarmOperatorNeeds().t1?.path).toBe('c.py');
     expect(swarmComplete().sw1?.task_count).toBe(2);
+  });
+
+  it('records preserved candidates without marking the swarm complete', () => {
+    ingestSwarmEvent({
+      type: 'swarm.candidate_ready',
+      swarm_id: 'sw1',
+      task_id: 't1',
+      role: 'builder-1',
+      branch: 'swarm/sw1/builder-1',
+      worktree: '/tmp/wt',
+      head: 'deadbeef',
+    });
+    ingestSwarmEvent({
+      type: 'swarm.candidates_ready',
+      swarm_id: 'sw1',
+      candidate_count: 1,
+    });
+
+    expect(swarmCandidateReady().t1?.head).toBe('deadbeef');
+    expect(swarmCandidatesReady().sw1?.candidate_count).toBe(1);
+    expect(swarmComplete().sw1).toBeUndefined();
   });
 
   it('clears an operator escalation when its task reports worker_done', () => {

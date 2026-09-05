@@ -18,6 +18,7 @@ import type { ActiveLayout } from './layoutPresets';
 
 /** Callbacks the session lifecycle reads on each save. */
 export type SessionContext = {
+  workspaceId: string;
   getRoot: () => TreeNode;
   getFocusedId: () => string;
   getActiveLayout: () => ActiveLayout;
@@ -48,7 +49,7 @@ export function installStructuralSessionAutosave(
       ctx.getProjectLessAccepted(),
     );
     if (ctx.projectPath) {
-      void saveSession(ctx.projectPath, session).catch((e) => {
+      void saveSession(ctx.workspaceId, session).catch((e) => {
         console.error('[voss-app] session autosave failed:', e);
       });
     } else {
@@ -99,7 +100,7 @@ export async function installCloseSessionSave(
       );
 
       if (ctx.projectPath) {
-        await saveSession(ctx.projectPath, session);
+        await saveSession(ctx.workspaceId, session);
       } else {
         await saveGlobalSession(session);
       }

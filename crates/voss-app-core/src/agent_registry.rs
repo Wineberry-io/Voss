@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 /// passthrough — no Rust internals leak.
 #[derive(Debug, thiserror::Error)]
 pub enum AgentRegistryError {
+    #[error("workspace id must be non-empty alphanumeric or hyphen")]
+    InvalidWorkspaceId,
     #[error("could not open agent registry")]
     OpenFailed,
     #[error("could not query agent registry")]
@@ -50,9 +52,22 @@ fn epoch_seconds() -> i64 {
         .unwrap_or(0)
 }
 
-/// `<workspace>/.voss/agent-registry.sqlite`
-pub fn registry_path(workspace: &Path) -> PathBuf {
-    workspace.join(".voss").join("agent-registry.sqlite")
+/// `~/.config/voss-app/agent-registries/<workspace-id>.sqlite`
+pub fn registry_path(workspace_id: &str) -> Result<PathBuf, AgentRegistryError> {
+    registry_path_in(&config_voss_app_dir(), workspace_id)
+}
+
+fn registry_path_in(config_dir: &Path, workspace_id: &str) -> Result<PathBuf, AgentRegistryError> {
+    if workspace_id.is_empty()
+        || !workspace_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(AgentRegistryError::InvalidWorkspaceId);
+    }
+    Ok(config_dir
+        .join("agent-registries")
+        .join(format!("{workspace_id}.sqlite")))
 }
 
 #[cfg(not(test))]
@@ -69,7 +84,6 @@ pub fn global_registry_path() -> PathBuf {
     })
 }
 
-#[cfg(not(test))]
 fn config_voss_app_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_default()
@@ -340,7 +354,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn open_test_registry(dir: &Path) -> Connection {
-        let path = registry_path(dir);
+        let path = dir.join("agent-registry.sqlite");
         open_registry(&path).expect("open test registry")
     }
 
@@ -384,7 +398,7 @@ mod tests {
     #[test]
     fn test_schema_creation() {
         let dir = tempdir().unwrap();
-        let path = registry_path(dir.path());
+        let path = dir.path().join("agent-registry.sqlite");
         let conn = open_registry(&path).unwrap();
         let count: i64 = conn
             .query_row(
@@ -511,9 +525,12 @@ mod tests {
     fn test_registry_path_resolution() {
         let dir = tempdir().unwrap();
         assert_eq!(
-            registry_path(dir.path()),
-            dir.path().join(".voss").join("agent-registry.sqlite")
+            registry_path_in(dir.path(), "workspace-1").unwrap(),
+            dir.path()
+                .join("agent-registries")
+                .join("workspace-1.sqlite")
         );
+        assert!(registry_path_in(dir.path(), "../escape").is_err());
 
         let custom = dir.path().join("global-registry.sqlite");
         TEST_GLOBAL_REGISTRY_PATH.with(|p| *p.borrow_mut() = Some(custom.clone()));
@@ -565,7 +582,7 @@ mod tests {
     #[test]
     fn test_schema_migration_idempotent_on_reopen() {
         let dir = tempdir().unwrap();
-        let path = registry_path(dir.path());
+        let path = dir.path().join("agent-registry.sqlite");
         {
             let _conn = open_registry(&path).unwrap();
         }

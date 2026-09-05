@@ -187,14 +187,12 @@ export class PtyTransport {
     rows: number;
     cols: number;
     cwd?: string;
-    vossAgentId?: string;
   }): Promise<string> {
     this.sessionId = await invoke<string>('spawn_pty', {
       onData: this.channel,
       rows: o.rows,
       cols: o.cols,
       cwd: o.cwd,
-      vossAgentId: o.vossAgentId ?? null,
     });
     return this.sessionId;
   }

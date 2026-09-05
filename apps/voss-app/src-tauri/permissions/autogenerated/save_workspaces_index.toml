@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-workspaces-index"
+description = "Enables the save_workspaces_index command without any pre-configured scope."
+commands.allow = ["save_workspaces_index"]
+
+[[permission]]
+identifier = "deny-save-workspaces-index"
+description = "Denies the save_workspaces_index command without any pre-configured scope."
+commands.deny = ["save_workspaces_index"]

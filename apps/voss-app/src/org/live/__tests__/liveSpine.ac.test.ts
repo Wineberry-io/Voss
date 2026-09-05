@@ -18,19 +18,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { spawnHermeticServe, type HermeticServe } from './acSpawn';
-import { buildVossClientFromHandshake } from '../vossClientBuild';
-import type { BuiltVossClient } from '../vossClientBuild';
 import { connectLiveStream, liveLabel, __resetLiveStream } from '../sseClient';
 import { __resetAttentionQueue } from '../../attention/attentionQueue';
 import { __resetBridgeMaps } from '../../model/bridge';
 import { replyPermission } from '../../../../../../sdk/typescript/src/client/permission';
 import type { AgentEvent } from '../../../../../../sdk/typescript/src/client/sse';
+import { subscribeToEvents } from '../../../../../../sdk/typescript/src/client/sse';
+import { createVossClient } from '../../../../../../sdk/typescript/src/client/rest';
 
 const STEP_TIMEOUT = 30_000; // every network wait bounded — CI fails fast
 const SPAWN_TIMEOUT = 90_000; // cold .pyc compile can take ~45-60s
 
 let serve: HermeticServe | undefined;
-let built: BuiltVossClient | undefined;
+let client: ReturnType<typeof createVossClient> | undefined;
 let sessionId = '';
 let workdir = '';
 
@@ -61,17 +61,17 @@ describe.skipIf(process.env.VOSS_AC_LIVE !== '1')(
     it(
       'builds the client and creates a real server session (VLIVE-02)',
       async () => {
-        built = buildVossClientFromHandshake({
-          port: serve!.port,
-          token: serve!.token,
-        });
+        client = createVossClient(
+          `http://127.0.0.1:${serve!.port}`,
+          serve!.token,
+        );
 
-        sessionId = await built.client.createSession(workdir);
+        sessionId = await client.createSession(workdir);
         expect(typeof sessionId).toBe('string');
         expect(sessionId.length).toBeGreaterThan(0);
 
         // The honest list mirror sees it (VLIVE-06 transport).
-        const sessions = await built.client.listSessions();
+        const sessions = await client.listSessions();
         expect(sessions.map((s) => s.id)).toContain(sessionId);
       },
       STEP_TIMEOUT,
@@ -87,9 +87,12 @@ describe.skipIf(process.env.VOSS_AC_LIVE !== '1')(
         });
 
         const handle = connectLiveStream({
-          baseUrl: built!.baseUrl,
           sessionId,
-          token: built!.token,
+          stream: subscribeToEvents(
+            `http://127.0.0.1:${serve!.port}`,
+            sessionId,
+            serve!.token,
+          ),
           cardId: sessionId,
           onEvent: (ev) => {
             events.push(ev);
@@ -99,7 +102,7 @@ describe.skipIf(process.env.VOSS_AC_LIVE !== '1')(
 
         expect(liveLabel()).toBe('live');
 
-        const accepted = await built!.client.postMessage(
+        const accepted = await client!.postMessage(
           sessionId,
           'do something small',
         );
@@ -135,7 +138,7 @@ describe.skipIf(process.env.VOSS_AC_LIVE !== '1')(
         // transport only — replyPermission resolves on the server's
         // {v:1, status:"stale"} 200 for an unknown id.
         await expect(
-          replyPermission(built!.client, sessionId, {
+          replyPermission(client!, sessionId, {
             id: 'ac-absent-id',
             choice: 'a',
           }),
@@ -147,7 +150,7 @@ describe.skipIf(process.env.VOSS_AC_LIVE !== '1')(
     it(
       'a follow-up postMessage on the same session is accepted (VLIVE-02 follow-up)',
       async () => {
-        const accepted = await built!.client.postMessage(
+        const accepted = await client!.postMessage(
           sessionId,
           'follow up',
         );

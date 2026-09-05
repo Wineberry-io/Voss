@@ -1,4 +1,5 @@
 """V25-02: swarm SSE event models + ServerSession swarm fields."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,6 +9,8 @@ from voss.harness.server.events import (
     AgentEventAdapter,
     EventEnvelope,
     SwarmAssign,
+    SwarmCandidateReady,
+    SwarmCandidatesReady,
     SwarmComplete,
     SwarmGate,
     SwarmNeedsOperator,
@@ -22,14 +25,31 @@ from voss.harness.server.sessions import ServerSession, SessionManager
 def test_swarm_event_union_roundtrip() -> None:
     samples = [
         SwarmAssign(
-            swarm_id="sw1", task_id="t1", session_id="s1",
-            owned_files=["src/a.py"], role="builder",
+            swarm_id="sw1",
+            task_id="t1",
+            session_id="s1",
+            owned_files=["src/a.py"],
+            role="builder",
         ),
+        SwarmCandidateReady(
+            swarm_id="sw1",
+            task_id="t1",
+            role="builder-1",
+            branch="swarm/sw1/builder-1",
+            worktree="/tmp/wt",
+            head="deadbeef",
+        ),
+        SwarmCandidatesReady(swarm_id="sw1", candidate_count=1),
         SwarmWorkerDone(swarm_id="sw1", task_id="t1", session_id="s1", summary="ok"),
-        SwarmGate(swarm_id="sw1", task_id="t1", gate_type="reviewer_reject", detail="no"),
+        SwarmGate(
+            swarm_id="sw1", task_id="t1", gate_type="reviewer_reject", detail="no"
+        ),
         SwarmNeedsOperator(
-            swarm_id="sw1", task_id="t1", session_id="s1",
-            tool_name="fs_write", path="src/x.py",
+            swarm_id="sw1",
+            task_id="t1",
+            session_id="s1",
+            tool_name="fs_write",
+            path="src/x.py",
         ),
         SwarmComplete(swarm_id="sw1", task_count=2, summary="done"),
     ]
@@ -47,8 +67,13 @@ def test_swarm_events_in_envelope_schema() -> None:
         if "const" in const:
             literals.add(const["const"])
     for t in (
-        "swarm.assign", "swarm.worker_done", "swarm.gate",
-        "swarm.needs_operator", "swarm.complete",
+        "swarm.assign",
+        "swarm.candidate_ready",
+        "swarm.candidates_ready",
+        "swarm.worker_done",
+        "swarm.gate",
+        "swarm.needs_operator",
+        "swarm.complete",
     ):
         assert t in literals, f"{t} missing from EventEnvelope schema"
 

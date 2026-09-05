@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use voss_app_core::agent_registry::{
     get_active_agents as registry_get_active_agents, global_registry_path, mark_stopped,
     open_registry, register_agent, registry_path, sweep_orphans, update_last_seen_all, AgentEntry,
@@ -23,7 +23,7 @@ use voss_app_core::project::{self, ProjectInfo};
 use voss_app_core::pty::reader::start_reader;
 use voss_app_core::pty::writer::validate_write;
 use voss_app_core::pty::{
-    foreground, spawn_command_session_managed, spawn_command_session_with_env,
+    foreground, spawn_command_session_managed, spawn_command_session_with_env, spawn_session,
 };
 use voss_app_core::session::{self, SessionFile};
 use voss_app_core::sidecar::{
@@ -32,6 +32,9 @@ use voss_app_core::sidecar::{
 use voss_app_core::themes::{self, CustomThemeFile};
 use voss_app_core::workspaces::{self, WorkspacesIndex};
 use voss_app_core::{PtyEvent, PtyRegistry};
+
+#[cfg(test)]
+mod command_manifest;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct CustomAgent {
@@ -128,25 +131,81 @@ fn save_custom_agents(agents: Vec<CustomAgent>) -> Result<(), String> {
 // `invoke('spawn_pty', …)` contract and app-managed `Arc<PtyRegistry>` state.
 
 type Reg<'a> = tauri::State<'a, Arc<PtyRegistry>>;
-type AgentDb<'a> = tauri::State<'a, Mutex<Option<Connection>>>;
-type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServe>>>;
+type AgentRegistryMap = HashMap<PathBuf, Connection>;
+type AgentDb<'a> = tauri::State<'a, Mutex<AgentRegistryMap>>;
+struct VossServeEntry {
+    id: String,
+    root: PathBuf,
+    serve: VossServe,
+}
+
+type VossServeMap<'a> = tauri::State<'a, Mutex<HashMap<String, VossServeEntry>>>;
+type VossStreamTasks = Arc<Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>>;
+type VossStreamMap<'a> = tauri::State<'a, VossStreamTasks>;
+
+const ORCHESTRATION_WINDOW_LABEL: &str = "orchestration";
+const ORCHESTRATION_CONTEXT_EVENT: &str = "voss://orchestration-context";
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OrchestrationContext {
+    cwd: String,
+    initial_view: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    card_id: Option<String>,
+}
+
+#[derive(Default)]
+struct OrchestrationWindowState {
+    context: Mutex<Option<OrchestrationContext>>,
+}
+
+fn require_orchestration_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() == ORCHESTRATION_WINDOW_LABEL {
+        Ok(())
+    } else {
+        Err("operation is not available from this window".to_string())
+    }
+}
 
 fn ensure_registry<'a>(
-    db: &'a Mutex<Option<Connection>>,
+    db: &'a Mutex<AgentRegistryMap>,
     workspace_path: Option<&str>,
-) -> Result<std::sync::MutexGuard<'a, Option<Connection>>, String> {
+) -> Result<(std::sync::MutexGuard<'a, AgentRegistryMap>, PathBuf), String> {
     let mut guard = db
         .lock()
         .map_err(|_| "agent registry lock poisoned".to_string())?;
-    if guard.is_none() {
-        let path = match workspace_path {
-            Some(ws) => registry_path(Path::new(ws)),
-            None => global_registry_path(),
-        };
+    let path = match workspace_path {
+        Some(ws) => {
+            let workspace_id =
+                registered_workspace_id_for_path(ws, &workspaces::load_workspaces_index())?;
+            registry_path(&workspace_id).map_err(|e| e.to_string())?
+        }
+        None => global_registry_path(),
+    };
+    if !guard.contains_key(&path) {
         let conn = open_registry(&path).map_err(|e| e.to_string())?;
-        *guard = Some(conn);
+        guard.insert(path.clone(), conn);
     }
-    Ok(guard)
+    Ok((guard, path))
+}
+
+fn registered_workspace_id_for_path(
+    workspace_path: &str,
+    index: &WorkspacesIndex,
+) -> Result<String, String> {
+    let canonical = std::fs::canonicalize(workspace_path)
+        .map_err(|_| "workspace path does not exist".to_string())?;
+    index
+        .workspaces
+        .iter()
+        .filter_map(|workspace| {
+            let project_path = workspace.project_path.as_deref()?;
+            let registered = std::fs::canonicalize(project_path).ok()?;
+            (registered == canonical).then(|| workspace.id.clone())
+        })
+        .next()
+        .ok_or_else(|| "workspace is not a registered project".to_string())
 }
 
 fn is_voss_cli_binary(cli_binary: &str) -> bool {
@@ -245,9 +304,9 @@ async fn spawn_agent(
     db: AgentDb<'_>,
     pty_state: Reg<'_>,
 ) -> Result<String, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
 
     let embedded_env = env_for_embedded_cli(&cli_binary, &cli_args);
@@ -320,9 +379,9 @@ async fn spawn_managed_agent(
     db: AgentDb<'_>,
     pty_state: Reg<'_>,
 ) -> Result<ManagedSpawnResult, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
 
     let embedded_env = env_for_embedded_cli(&cli_binary, &cli_args);
@@ -378,9 +437,151 @@ async fn spawn_managed_agent(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_env_with_agent_id, clipboard_image_extension, env_for_embedded_cli,
-        is_interactive_voss_command,
+        authorize_sidecar_cwd, build_env_with_agent_id, clipboard_image_extension,
+        command_manifest, decode_sse_frame, env_for_embedded_cli, is_interactive_voss_command,
+        normalize_orchestration_view, registered_workspace_id_for_path, sidecar_url,
+        take_sse_frame, SidecarHandle,
     };
+    use std::collections::HashSet;
+    use voss_app_core::workspaces::{WorkspaceEntry, WorkspacesIndex, CURRENT_WORKSPACES_VERSION};
+
+    fn workspace_index(project_path: Option<String>) -> WorkspacesIndex {
+        WorkspacesIndex {
+            version: CURRENT_WORKSPACES_VERSION,
+            active_workspace_id: Some("workspace-1".into()),
+            workspaces: vec![WorkspaceEntry {
+                id: "workspace-1".into(),
+                name: "Workspace".into(),
+                project_path,
+                accent_color: "#ff5b1f".into(),
+                order: 0,
+                active_layout_preset: None,
+                pinned_profile: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn sidecar_cwd_must_equal_a_registered_project_root() {
+        let root = std::env::temp_dir().join(format!(
+            "voss-sidecar-auth-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let project = root.join("project");
+        let child = project.join("child");
+        let other = root.join("other");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+
+        let index = workspace_index(Some(project.to_string_lossy().into_owned()));
+        assert_eq!(
+            authorize_sidecar_cwd(project.to_str().unwrap(), &index).unwrap(),
+            std::fs::canonicalize(&project).unwrap()
+        );
+        assert!(authorize_sidecar_cwd(child.to_str().unwrap(), &index).is_err());
+        assert!(authorize_sidecar_cwd(other.to_str().unwrap(), &index).is_err());
+        assert!(authorize_sidecar_cwd(project.to_str().unwrap(), &workspace_index(None),).is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sidecar_handle_never_serializes_port_or_token() {
+        let value = serde_json::to_value(SidecarHandle {
+            sidecar_id: "opaque-id".into(),
+        })
+        .unwrap();
+        assert_eq!(value, serde_json::json!({"sidecarId": "opaque-id"}));
+    }
+
+    #[test]
+    fn sidecar_url_encodes_path_segments() {
+        let url = sidecar_url(1234, &["session", "../other", "events"]).unwrap();
+        assert!(!url.as_str().contains("/../"));
+        assert!(url.as_str().contains("..%2Fother"));
+    }
+
+    #[test]
+    fn sidecar_sse_parser_handles_chunked_crlf_frames() {
+        let mut buffer =
+            b"data: {\"type\":\"thinking\"}\r\n\r\ndata: {\"type\":\"final\"}".to_vec();
+        let first = take_sse_frame(&mut buffer).unwrap();
+        assert_eq!(
+            decode_sse_frame(&first).unwrap()["type"],
+            serde_json::json!("thinking")
+        );
+        assert!(take_sse_frame(&mut buffer).is_none());
+    }
+
+    fn capability_commands(raw: &str) -> HashSet<String> {
+        serde_json::from_str::<serde_json::Value>(raw).unwrap()["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|permission| permission.as_str())
+            .filter_map(|permission| permission.strip_prefix("allow-"))
+            .map(|permission| permission.replace('-', "_"))
+            .collect()
+    }
+
+    #[test]
+    fn app_manifest_covers_every_registered_command() {
+        let source = include_str!("lib.rs");
+        let handler = source
+            .rsplit_once(".invoke_handler(tauri::generate_handler![")
+            .unwrap()
+            .1
+            .split_once("])")
+            .unwrap()
+            .0;
+        let registered: HashSet<&str> = handler
+            .split(',')
+            .map(str::trim)
+            .filter(|command| !command.is_empty())
+            .collect();
+        let manifest: HashSet<&str> = command_manifest::APP_COMMANDS.iter().copied().collect();
+        assert_eq!(registered, manifest);
+    }
+
+    #[test]
+    fn capability_files_match_the_reviewed_command_sets() {
+        let main = capability_commands(include_str!("../capabilities/default.json"));
+        let orchestration = capability_commands(include_str!("../capabilities/orchestration.json"));
+        assert_eq!(
+            main,
+            command_manifest::MAIN_COMMANDS
+                .iter()
+                .map(|command| (*command).to_string())
+                .collect()
+        );
+        assert_eq!(
+            orchestration,
+            command_manifest::ORCHESTRATION_COMMANDS
+                .iter()
+                .map(|command| (*command).to_string())
+                .collect()
+        );
+        assert!(!main.contains("start_voss_serve"));
+        assert!(!main.contains("call_voss_sidecar"));
+        assert!(!orchestration.contains("spawn_pty"));
+        assert!(!orchestration.contains("spawn_agent"));
+    }
+
+    #[test]
+    fn orchestration_view_allowlist_rejects_unknown_surfaces() {
+        assert_eq!(
+            normalize_orchestration_view(Some("memory".to_string())),
+            "memory"
+        );
+        assert_eq!(
+            normalize_orchestration_view(Some("settings".to_string())),
+            "review"
+        );
+    }
 
     /// VBUS-03 camelCase IPC round-trip guard (V14 AgentEntry lesson): a
     /// serde rename mismatch on `vossAgentId` would arrive here as `None`
@@ -504,6 +705,25 @@ mod tests {
     }
 
     #[test]
+    fn registry_identity_comes_from_the_registered_workspace() {
+        let base = unique_tmp("registries");
+        let first = base.join("first");
+        let second = base.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+
+        let index = workspace_index(Some(first.to_string_lossy().into_owned()));
+        assert_eq!(
+            registered_workspace_id_for_path(first.to_str().unwrap(), &index).unwrap(),
+            "workspace-1"
+        );
+        assert!(registered_workspace_id_for_path(second.to_str().unwrap(), &index).is_err());
+        assert!(!first.join(".voss").exists());
+
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
     fn enumerate_runs_filters_flat_session_files() {
         let base = unique_tmp("enum");
         let sessions = base.join(".voss").join("sessions");
@@ -513,7 +733,7 @@ mod tests {
         // Legacy flat SessionRecord (Pitfall 1) — must be excluded.
         fs::write(sessions.join("legacyflat999.json"), "{}").unwrap();
 
-        let runs = super::enumerate_runs(base.to_string_lossy().into_owned());
+        let runs = super::enumerate_runs_impl(base.to_string_lossy().into_owned());
         let ids: Vec<String> = runs.iter().map(|r| r.run_id.clone()).collect();
         assert_eq!(ids, vec!["abc123run456".to_string()]);
 
@@ -522,7 +742,7 @@ mod tests {
 
     #[test]
     fn load_run_rejects_traversal() {
-        let res = super::load_run("../etc".into(), "/tmp".into(), "voss".into());
+        let res = super::load_run_impl("../etc".into(), "/tmp".into(), "voss".into());
         assert!(res.is_err());
     }
 
@@ -537,7 +757,7 @@ mod tests {
         fs::write(&fake, "#!/bin/sh\nexit 3\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
 
-        let res = super::run_decision(
+        let res = super::run_decision_impl(
             fake.to_string_lossy().into_owned(),
             base.to_string_lossy().into_owned(),
             vec!["audit".into(), "deadbeef1234".into(), "--approve".into()],
@@ -555,10 +775,11 @@ fn get_active_agents(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<Vec<AgentEntry>, String> {
-    let Ok(mut guard) = ensure_registry(db.inner(), workspace_path.as_deref()) else {
+    let Ok((mut guard, registry_key)) = ensure_registry(db.inner(), workspace_path.as_deref())
+    else {
         return Ok(Vec::new());
     };
-    let Some(conn) = guard.as_mut() else {
+    let Some(conn) = guard.get_mut(&registry_key) else {
         return Ok(Vec::new());
     };
     Ok(registry_get_active_agents(conn).unwrap_or_else(|e| {
@@ -573,18 +794,18 @@ fn mark_agent_stopped(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<(), String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     mark_stopped(conn, &pane_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn update_agents_last_seen(workspace_path: Option<String>, db: AgentDb<'_>) -> Result<(), String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     update_last_seen_all(conn).map_err(|e| e.to_string())
 }
@@ -595,9 +816,9 @@ fn sweep_orphan_agents(
     workspace_path: Option<String>,
     db: AgentDb<'_>,
 ) -> Result<usize, String> {
-    let mut guard = ensure_registry(db.inner(), workspace_path.as_deref())?;
+    let (mut guard, registry_key) = ensure_registry(db.inner(), workspace_path.as_deref())?;
     let conn = guard
-        .as_mut()
+        .get_mut(&registry_key)
         .ok_or_else(|| "agent registry unavailable".to_string())?;
     sweep_orphans(conn, &valid_pane_ids).map_err(|e| e.to_string())
 }
@@ -608,24 +829,9 @@ async fn spawn_pty(
     rows: u16,
     cols: u16,
     cwd: Option<String>,
-    voss_agent_id: Option<String>,
     state: Reg<'_>,
 ) -> Result<String, String> {
-    // Plain-shell spawn routed through the env-carrying path so every pane
-    // receives VOSS_AGENT_ID (VBUS-03 D-11). Mirrors spawn_session's
-    // behavior: $SHELL + VOSS_EMBEDDED=1 (TERM/COLORTERM set by the callee).
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let full_env = build_env_with_agent_id(
-        vec![("VOSS_EMBEDDED".to_string(), "1".to_string())],
-        voss_agent_id,
-    );
-    let env_refs: Vec<(&str, &str)> = full_env
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    let (session, reader, pause_rx) =
-        spawn_command_session_with_env(&shell, &[], &env_refs, rows, cols, cwd)
-            .map_err(|e| e.to_string())?;
+    let (session, reader, pause_rx) = spawn_session(rows, cols, cwd).map_err(|e| e.to_string())?;
     let registry: Arc<PtyRegistry> = Arc::clone(state.inner());
     let id = registry.insert(session);
     start_reader(id.clone(), reader, pause_rx, on_data, registry);
@@ -720,31 +926,34 @@ fn get_grid(state: GridSlot<'_>) -> Result<GridState, String> {
 // `generate_handler!` constraint as the PTY and grid commands above — the
 // core's own `#[tauri::command]` macros are not in scope here.
 //
-// `workspace_path` is the absolute path to the open project root; the
-// frontend resolves it via the A5 project-open seam (until A5 lands the
-// frontend passes the CWD of the focused pane or the user's home).
+// Private layouts are keyed by the registered workspace UUID. The project path
+// is derived in Rust and used only for copy-only legacy migration.
 // Errors propagate as `LayoutError`'s Display strings — those match the
 // A4-UI-SPEC error copy exactly, so the renderer can surface them
 // verbatim.
 
 #[tauri::command]
-fn save_layout(workspace_path: String, name: String, layout: LayoutFile) -> Result<(), String> {
-    layouts::save_layout(Path::new(&workspace_path), &name, &layout).map_err(|e| e.to_string())
+fn save_layout(workspace_id: String, name: String, layout: LayoutFile) -> Result<(), String> {
+    let _ = registered_project_path(&workspace_id)?;
+    layouts::save_layout(&workspace_id, &name, &layout).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn load_layout(workspace_path: String, name: String) -> Result<LayoutFile, String> {
-    layouts::load_layout(Path::new(&workspace_path), &name).map_err(|e| e.to_string())
+fn load_layout(workspace_id: String, name: String) -> Result<LayoutFile, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::load_layout(&workspace_id, Some(&legacy_project), &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn list_layouts(workspace_path: String) -> Result<Vec<String>, String> {
-    layouts::list_layouts(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn list_layouts(workspace_id: String) -> Result<Vec<String>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::list_layouts(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn load_default_layout(workspace_path: String) -> Result<Option<LayoutFile>, String> {
-    layouts::load_default_layout(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn load_default_layout(workspace_id: String) -> Result<Option<LayoutFile>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    layouts::load_default_layout(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 // ---- Context pin commands (F4-04) -------------------------------------------
@@ -802,43 +1011,6 @@ fn emit_new_swarm_results(
             eprintln!("[voss-app] swarm result event failed: {e}");
         }
     }
-}
-
-#[tauri::command]
-fn get_env_var(name: String) -> Result<String, String> {
-    std::env::var(&name).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn write_swarm_files(
-    workspace_path: String,
-    manifest_json: String,
-    tasks: Vec<(String, String)>,
-    shared_context: String,
-) -> Result<(), String> {
-    if workspace_path.trim().is_empty() {
-        return Err("workspace_path must not be empty".to_string());
-    }
-
-    let swarm_dir = Path::new(&workspace_path).join(".voss").join("swarm");
-    let tasks_dir = swarm_dir.join("tasks");
-    let results_dir = swarm_dir.join("results");
-    let shared_dir = swarm_dir.join("shared");
-    std::fs::create_dir_all(&tasks_dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&results_dir).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&shared_dir).map_err(|e| e.to_string())?;
-
-    let manifest_target = swarm_dir.join("manifest.json");
-    let manifest_tmp = swarm_dir.join("manifest.json.tmp");
-    std::fs::write(&manifest_tmp, manifest_json).map_err(|e| e.to_string())?;
-    std::fs::rename(&manifest_tmp, &manifest_target).map_err(|e| e.to_string())?;
-
-    for (filename, content) in tasks {
-        std::fs::write(tasks_dir.join(filename), content).map_err(|e| e.to_string())?;
-    }
-
-    std::fs::write(shared_dir.join("context.md"), shared_context).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -910,17 +1082,29 @@ fn default_cwd(project_path: Option<String>) -> String {
 // ---- Session persistence commands (A6-01) -----------------------------------
 // Thin app-level wrappers over `voss_app_core::session`. Same cross-crate
 // `generate_handler!` constraint as the PTY, grid, layout, and project
-// commands above. Project commands take `workspace_path`; global commands
-// take no path argument.
+// commands above. Project sessions are keyed by the registered workspace UUID;
+// repository paths are used only for copy-only legacy migration.
 
-#[tauri::command]
-fn save_session(workspace_path: String, session: SessionFile) -> Result<(), String> {
-    session::save_session(Path::new(&workspace_path), &session).map_err(|e| e.to_string())
+fn registered_project_path(workspace_id: &str) -> Result<PathBuf, String> {
+    workspaces::load_workspaces_index()
+        .workspaces
+        .into_iter()
+        .find(|workspace| workspace.id == workspace_id)
+        .and_then(|workspace| workspace.project_path)
+        .map(PathBuf::from)
+        .ok_or_else(|| "workspace is not a registered project".to_string())
 }
 
 #[tauri::command]
-fn load_session(workspace_path: String) -> Result<Option<SessionFile>, String> {
-    session::load_session(Path::new(&workspace_path)).map_err(|e| e.to_string())
+fn save_session(workspace_id: String, session: SessionFile) -> Result<(), String> {
+    let _ = registered_project_path(&workspace_id)?;
+    session::save_session(&workspace_id, &session).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_session(workspace_id: String) -> Result<Option<SessionFile>, String> {
+    let legacy_project = registered_project_path(&workspace_id)?;
+    session::load_session(&workspace_id, Some(&legacy_project)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1281,8 +1465,7 @@ fn sessions_dir(cwd: &str) -> PathBuf {
     Path::new(cwd).join(".voss").join("sessions")
 }
 
-#[tauri::command]
-fn load_run(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, String> {
+fn load_run_impl(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, String> {
     // Path traversal guard BEFORE any filesystem access (mirror audit_cmd).
     if !is_safe_run_id(&run_id) {
         return Err(format!("invalid run_id: {run_id}"));
@@ -1359,8 +1542,7 @@ fn load_run(run_id: String, cwd: String, cli_binary: String) -> Result<RunData, 
     })
 }
 
-#[tauri::command]
-fn enumerate_runs(cwd: String) -> Vec<RunEntry> {
+fn enumerate_runs_impl(cwd: String) -> Vec<RunEntry> {
     let dir = sessions_dir(&cwd);
     let rd = match std::fs::read_dir(&dir) {
         Ok(rd) => rd,
@@ -1404,8 +1586,7 @@ fn enumerate_runs(cwd: String) -> Vec<RunEntry> {
     entries
 }
 
-#[tauri::command]
-fn run_decision(
+fn run_decision_impl(
     cli_binary: String,
     cwd: String,
     args: Vec<String>,
@@ -1437,25 +1618,526 @@ fn run_decision(
     })
 }
 
+fn orchestration_root(
+    window: &tauri::WebviewWindow,
+    state: &OrchestrationWindowState,
+) -> Result<String, String> {
+    require_orchestration_window(window)?;
+    state
+        .context
+        .lock()
+        .map_err(|_| "could not read orchestration context".to_string())?
+        .as_ref()
+        .map(|context| context.cwd.clone())
+        .ok_or_else(|| "orchestration context is unavailable".to_string())
+}
+
+#[tauri::command]
+fn load_run(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    run_id: String,
+) -> Result<RunData, String> {
+    load_run_impl(
+        run_id,
+        orchestration_root(&window, state.inner())?,
+        "voss".to_string(),
+    )
+}
+
+#[tauri::command]
+fn enumerate_runs(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+) -> Result<Vec<RunEntry>, String> {
+    Ok(enumerate_runs_impl(orchestration_root(
+        &window,
+        state.inner(),
+    )?))
+}
+
+#[tauri::command]
+fn run_decision(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    args: Vec<String>,
+) -> Result<DecisionResult, String> {
+    run_decision_impl(
+        "voss".to_string(),
+        orchestration_root(&window, state.inner())?,
+        args,
+    )
+}
+
 // ---- voss serve sidecar (V15) ----------------------------------------------
 // VLIVE-01: lazily spawn one `voss serve` per workspace cwd, reuse it while
 // alive, and reap all on app exit (map entries drop with the managed state —
 // kill_on_drop, T-V15-02). Only the Tauri side can spawn the server (V14
 // Pitfall 4 — the webview launcher imports node:child_process).
 
+fn authorize_sidecar_cwd(cwd: &str, index: &WorkspacesIndex) -> Result<PathBuf, String> {
+    let canonical = validate_workspace_cwd(cwd, &[])?;
+    let registered = index
+        .workspaces
+        .iter()
+        .filter_map(|workspace| workspace.project_path.as_deref())
+        .filter_map(|path| std::fs::canonicalize(path).ok())
+        .any(|path| path == canonical);
+    if !registered {
+        return Err("workspace is not a registered project".to_string());
+    }
+    Ok(canonical)
+}
+
+fn normalize_orchestration_view(view: Option<String>) -> String {
+    match view.as_deref() {
+        Some("swarm-map" | "memory" | "review") => view.unwrap(),
+        _ => "review".to_string(),
+    }
+}
+
 #[tauri::command]
-async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeHandshake, String> {
-    // T-V15-01: canonicalize + validate before the cwd reaches a spawn arg.
-    let canonical = validate_workspace_cwd(&cwd, &[])?;
+async fn open_orchestration_console(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, OrchestrationWindowState>,
+    cwd: String,
+    initial_view: Option<String>,
+    card_id: Option<String>,
+) -> Result<(), String> {
+    let root = authorize_sidecar_cwd(&cwd, &workspaces::load_workspaces_index())?;
+    let context = OrchestrationContext {
+        cwd: root.to_string_lossy().into_owned(),
+        initial_view: normalize_orchestration_view(initial_view),
+        card_id,
+    };
+    *state
+        .context
+        .lock()
+        .map_err(|_| "could not open orchestration console".to_string())? = Some(context.clone());
+
+    if let Some(window) = app.get_webview_window(ORCHESTRATION_WINDOW_LABEL) {
+        window
+            .show()
+            .and_then(|_| window.set_focus())
+            .map_err(|_| "could not focus orchestration console".to_string())?;
+        app.emit_to(
+            ORCHESTRATION_WINDOW_LABEL,
+            ORCHESTRATION_CONTEXT_EVENT,
+            context,
+        )
+        .map_err(|_| "could not update orchestration console".to_string())?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        ORCHESTRATION_WINDOW_LABEL,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Voss Orchestration")
+    .inner_size(1180.0, 760.0)
+    .min_inner_size(800.0, 500.0)
+    .decorations(false)
+    .build()
+    .map_err(|_| "could not open orchestration console".to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_orchestration_context(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, OrchestrationWindowState>,
+) -> Result<OrchestrationContext, String> {
+    let _ = orchestration_root(&window, state.inner())?;
+    state
+        .context
+        .lock()
+        .map_err(|_| "could not read orchestration context".to_string())?
+        .clone()
+        .ok_or_else(|| "orchestration context is unavailable".to_string())
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarHandle {
+    sidecar_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum SidecarOperation {
+    CreateSession,
+    ListSessions,
+    ListSaved,
+    GetSession {
+        session_id: String,
+    },
+    DeleteSession {
+        session_id: String,
+    },
+    PostMessage {
+        session_id: String,
+        text: String,
+        mode: String,
+    },
+    AbortSession {
+        session_id: String,
+    },
+    GetCost {
+        session_id: String,
+    },
+    Doctor,
+    ReplyPermission {
+        session_id: String,
+        id: String,
+        choice: String,
+    },
+    Memory {
+        query: Option<String>,
+        top_k: u32,
+    },
+    GetSwarm {
+        swarm_id: String,
+    },
+    CreateSwarm {
+        goal: String,
+        builders: u32,
+        roster: Option<Vec<serde_json::Value>>,
+    },
+    RunSwarm {
+        swarm_id: String,
+    },
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum SidecarStreamEvent {
+    Event { event: serde_json::Value },
+    End,
+    Error { message: String },
+}
+
+fn sidecar_connection(
+    sidecar_id: &str,
+    state: &Mutex<HashMap<String, VossServeEntry>>,
+) -> Result<(ServeHandshake, PathBuf), String> {
+    let map = state.lock().map_err(|_| "lock poisoned".to_string())?;
+    map.values()
+        .find(|entry| entry.id == sidecar_id && entry.serve.pid().is_some())
+        .map(|entry| (entry.serve.handshake.clone(), entry.root.clone()))
+        .ok_or_else(|| "sidecar handle is unavailable".to_string())
+}
+
+fn sidecar_url(port: u16, segments: &[&str]) -> Result<reqwest::Url, String> {
+    let mut url = reqwest::Url::parse(&format!("http://127.0.0.1:{port}"))
+        .map_err(|_| "invalid sidecar endpoint".to_string())?;
+    {
+        let mut path = url
+            .path_segments_mut()
+            .map_err(|_| "invalid sidecar endpoint".to_string())?;
+        path.clear();
+        path.extend(segments);
+    }
+    Ok(url)
+}
+
+async fn send_sidecar_request(
+    token: &str,
+    request: reqwest::RequestBuilder,
+) -> Result<serde_json::Value, String> {
+    let response = request
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|_| "sidecar request failed".to_string())?;
+    let status = response.status();
+    if response
+        .content_length()
+        .is_some_and(|length| length > 4_194_304)
+    {
+        return Err("sidecar response exceeded limit".to_string());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|_| "sidecar response failed".to_string())?;
+    if bytes.len() > 4_194_304 {
+        return Err("sidecar response exceeded limit".to_string());
+    }
+    if !status.is_success() {
+        let detail = serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .and_then(|value| value.get("detail").cloned())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| status.to_string());
+        return Err(format!("sidecar request failed: {detail}"));
+    }
+    if bytes.is_empty() {
+        return Ok(serde_json::Value::Null);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "invalid sidecar response".to_string())
+}
+
+#[tauri::command]
+async fn call_voss_sidecar(
+    window: tauri::WebviewWindow,
+    sidecar_id: String,
+    operation: SidecarOperation,
+    state: VossServeMap<'_>,
+) -> Result<serde_json::Value, String> {
+    require_orchestration_window(&window)?;
+    let (handshake, root) = sidecar_connection(&sidecar_id, state.inner())?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|_| "sidecar client unavailable".to_string())?;
+    let root = root.to_string_lossy().into_owned();
+
+    if let SidecarOperation::CreateSwarm { goal, builders, .. } = &operation {
+        if goal.is_empty() || goal.len() > 1_048_576 || *builders == 0 || *builders > 32 {
+            return Err("invalid swarm request".to_string());
+        }
+    }
+
+    let request = match operation {
+        SidecarOperation::CreateSession => client
+            .post(sidecar_url(handshake.port, &["session"])?)
+            .json(&serde_json::json!({"auth": "auto", "cwd": root})),
+        SidecarOperation::ListSessions => client.get(sidecar_url(handshake.port, &["session"])?),
+        SidecarOperation::ListSaved => {
+            let mut url = sidecar_url(handshake.port, &["sessions", "saved"])?;
+            url.query_pairs_mut().append_pair("cwd", &root);
+            client.get(url)
+        }
+        SidecarOperation::GetSession { session_id } => {
+            client.get(sidecar_url(handshake.port, &["session", &session_id])?)
+        }
+        SidecarOperation::DeleteSession { session_id } => {
+            client.delete(sidecar_url(handshake.port, &["session", &session_id])?)
+        }
+        SidecarOperation::PostMessage {
+            session_id,
+            text,
+            mode,
+        } => {
+            if !matches!(mode.as_str(), "plan" | "edit" | "auto") || text.len() > 1_048_576 {
+                return Err("invalid sidecar message".to_string());
+            }
+            client
+                .post(sidecar_url(
+                    handshake.port,
+                    &["session", &session_id, "message"],
+                )?)
+                .json(&serde_json::json!({
+                    "mode": mode,
+                    "parts": [{"type": "text", "text": text}],
+                }))
+        }
+        SidecarOperation::AbortSession { session_id } => client.post(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "abort"],
+        )?),
+        SidecarOperation::GetCost { session_id } => client.get(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "cost"],
+        )?),
+        SidecarOperation::Doctor => {
+            let mut url = sidecar_url(handshake.port, &["doctor"])?;
+            url.query_pairs_mut().append_pair("cwd", &root);
+            client.get(url)
+        }
+        SidecarOperation::ReplyPermission {
+            session_id,
+            id,
+            choice,
+        } => {
+            if !matches!(choice.as_str(), "a" | "A" | "d" | "y" | "n") {
+                return Err("invalid permission choice".to_string());
+            }
+            client
+                .post(sidecar_url(
+                    handshake.port,
+                    &["session", &session_id, "permission"],
+                )?)
+                .json(&serde_json::json!({"v": 1, "id": id, "choice": choice}))
+        }
+        SidecarOperation::Memory { query, top_k } => {
+            if top_k == 0 || top_k > 100 {
+                return Err("invalid memory result limit".to_string());
+            }
+            let mut url = sidecar_url(handshake.port, &["memory"])?;
+            {
+                let mut query_pairs = url.query_pairs_mut();
+                query_pairs.append_pair("cwd", &root);
+                if let Some(query) = query.filter(|value| !value.trim().is_empty()) {
+                    query_pairs.append_pair("q", query.trim());
+                    query_pairs.append_pair("top_k", &top_k.to_string());
+                }
+            }
+            client.get(url)
+        }
+        SidecarOperation::GetSwarm { swarm_id } => {
+            client.get(sidecar_url(handshake.port, &["swarm", &swarm_id])?)
+        }
+        SidecarOperation::CreateSwarm {
+            goal,
+            builders,
+            roster,
+        } => client
+            .post(sidecar_url(handshake.port, &["swarm"])?)
+            .json(&serde_json::json!({
+                "goal": goal,
+                "builders": builders,
+                "cwd": root,
+                "roster": roster,
+            })),
+        SidecarOperation::RunSwarm { swarm_id } => {
+            client.post(sidecar_url(handshake.port, &["swarm", &swarm_id, "run"])?)
+        }
+    };
+
+    send_sidecar_request(&handshake.token, request).await
+}
+
+fn take_sse_frame(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
+    let (index, separator_len) = buffer
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| (index, 4))
+        .or_else(|| {
+            buffer
+                .windows(2)
+                .position(|window| window == b"\n\n")
+                .map(|index| (index, 2))
+        })?;
+    let frame = buffer[..index].to_vec();
+    buffer.drain(..index + separator_len);
+    Some(frame)
+}
+
+fn decode_sse_frame(frame: &[u8]) -> Option<serde_json::Value> {
+    let text = std::str::from_utf8(frame).ok()?;
+    let data = text
+        .lines()
+        .filter_map(|line| line.trim_end_matches('\r').strip_prefix("data:"))
+        .map(str::trim_start)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if data.is_empty() {
+        return None;
+    }
+    serde_json::from_str(&data).ok()
+}
+
+#[tauri::command]
+async fn subscribe_voss_events(
+    window: tauri::WebviewWindow,
+    sidecar_id: String,
+    session_id: String,
+    on_event: tauri::ipc::Channel<SidecarStreamEvent>,
+    sidecars: VossServeMap<'_>,
+    streams: VossStreamMap<'_>,
+) -> Result<String, String> {
+    require_orchestration_window(&window)?;
+    let (handshake, _) = sidecar_connection(&sidecar_id, sidecars.inner())?;
+    let response = reqwest::Client::new()
+        .get(sidecar_url(
+            handshake.port,
+            &["session", &session_id, "events"],
+        )?)
+        .bearer_auth(&handshake.token)
+        .send()
+        .await
+        .map_err(|_| "sidecar event stream failed".to_string())?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "sidecar event stream failed: {}",
+            response.status()
+        ));
+    }
+
+    let stream_id = uuid::Uuid::new_v4().to_string();
+    let task = tauri::async_runtime::spawn(async move {
+        let mut response = response;
+        let mut buffer = Vec::new();
+        loop {
+            match response.chunk().await {
+                Ok(Some(chunk)) => {
+                    buffer.extend_from_slice(&chunk);
+                    if buffer.len() > 1_048_576 {
+                        let _ = on_event.send(SidecarStreamEvent::Error {
+                            message: "sidecar event exceeded limit".to_string(),
+                        });
+                        break;
+                    }
+                    while let Some(frame) = take_sse_frame(&mut buffer) {
+                        if let Some(event) = decode_sse_frame(&frame) {
+                            if on_event.send(SidecarStreamEvent::Event { event }).is_err() {
+                                return;
+                            }
+                        }
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    let _ = on_event.send(SidecarStreamEvent::Error {
+                        message: "sidecar event stream failed".to_string(),
+                    });
+                    break;
+                }
+            }
+        }
+        let _ = on_event.send(SidecarStreamEvent::End);
+    });
+    streams
+        .lock()
+        .map_err(|_| "stream lock poisoned".to_string())?
+        .insert(stream_id.clone(), task);
+    Ok(stream_id)
+}
+
+#[tauri::command]
+fn unsubscribe_voss_events(
+    window: tauri::WebviewWindow,
+    stream_id: String,
+    streams: VossStreamMap<'_>,
+) -> Result<(), String> {
+    require_orchestration_window(&window)?;
+    if let Some(task) = streams
+        .lock()
+        .map_err(|_| "stream lock poisoned".to_string())?
+        .remove(&stream_id)
+    {
+        task.abort();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_voss_serve(
+    window: tauri::WebviewWindow,
+    cwd: String,
+    state: VossServeMap<'_>,
+) -> Result<SidecarHandle, String> {
+    require_orchestration_window(&window)?;
+    // Canonicalize and require an exact persisted project-workspace match before
+    // the webview-controlled cwd reaches a process-spawn argument.
+    let index = workspaces::load_workspaces_index();
+    let canonical = authorize_sidecar_cwd(&cwd, &index)?;
+    let key = canonical.to_string_lossy().into_owned();
 
     // Reuse-if-alive; pid() == None means the child was reaped — drop the
     // stale entry and respawn (Pitfall 5). Lock scope closes before any await.
     {
         let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
-        match map.get(&cwd) {
-            Some(serve) if serve.pid().is_some() => return Ok(serve.handshake.clone()),
+        match map.get(&key) {
+            Some(entry) if entry.serve.pid().is_some() => {
+                return Ok(SidecarHandle {
+                    sidecar_id: entry.id.clone(),
+                })
+            }
             Some(_) => {
-                map.remove(&cwd);
+                map.remove(&key);
             }
             None => {}
         }
@@ -1465,11 +2147,18 @@ async fn start_voss_serve(cwd: String, state: VossServeMap<'_>) -> Result<ServeH
     let serve = spawn_voss_serve(&python_path(), &canonical)
         .await
         .map_err(|e| e.to_string())?;
-    let handshake = serve.handshake.clone();
+    let sidecar_id = uuid::Uuid::new_v4().to_string();
 
     let mut map = state.lock().map_err(|_| "lock poisoned".to_string())?;
-    map.insert(cwd, serve);
-    Ok(handshake)
+    map.insert(
+        key,
+        VossServeEntry {
+            id: sidecar_id.clone(),
+            root: canonical,
+            serve,
+        },
+    );
+    Ok(SidecarHandle { sidecar_id })
 }
 
 // ---- ui_log: webview diagnostics -> dev terminal ---------------------------
@@ -1495,10 +2184,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(PtyRegistry::default()))
         .manage(Mutex::new(GridState::default()))
-        .manage(Mutex::new(None::<Connection>))
+        .manage(Mutex::new(AgentRegistryMap::new()))
         .manage(SwarmWatchState::default())
         .manage(KeymapWatchState::default())
-        .manage(Mutex::new(HashMap::<String, VossServe>::new()))
+        .manage(OrchestrationWindowState::default())
+        .manage(Mutex::new(HashMap::<String, VossServeEntry>::new()))
+        .manage(Arc::new(Mutex::new(HashMap::<
+            String,
+            tauri::async_runtime::JoinHandle<()>,
+        >::new())))
         .invoke_handler(tauri::generate_handler![
             get_theme_overrides,
             save_clipboard_image,
@@ -1528,8 +2222,6 @@ pub fn run() {
             load_session,
             save_global_session,
             load_global_session,
-            get_env_var,
-            write_swarm_files,
             watch_swarm_results,
             stop_swarm_watcher,
             load_workspaces_index,
@@ -1564,6 +2256,11 @@ pub fn run() {
             enumerate_runs,
             run_decision,
             start_voss_serve,
+            call_voss_sidecar,
+            subscribe_voss_events,
+            unsubscribe_voss_events,
+            open_orchestration_console,
+            get_orchestration_context,
             ui_log,
         ])
         .run(tauri::generate_context!())

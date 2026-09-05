@@ -346,7 +346,6 @@ export async function spawnPaneSession(s: PaneSession): Promise<void> {
       rows: s.term.rows,
       cols: s.term.cols,
       cwd,
-      vossAgentId,
     });
   }
   s.dot = 'running';

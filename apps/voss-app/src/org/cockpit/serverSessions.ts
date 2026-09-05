@@ -17,8 +17,8 @@ import { createSignal } from 'solid-js';
 
 import type {
   SessionInfo,
-  VossClient,
 } from '../../../../../sdk/typescript/src/client/rest';
+import type { SidecarVossClient } from '../live/sidecarClient';
 import { registerNativeCard } from '../model/bridge';
 
 const [serverSessions, setServerSessions] = createSignal<SessionInfo[]>([]);
@@ -80,7 +80,7 @@ function sortNewestFirst(list: SessionInfo[]): SessionInfo[] {
 }
 
 /** Populate the list from GET /session; degrade silently on error. */
-export async function refreshSessions(client: VossClient): Promise<void> {
+export async function refreshSessions(client: SidecarVossClient): Promise<void> {
   setSessionsLoading(true);
   try {
     setServerSessions(sortNewestFirst(await client.listSessions()));
@@ -97,13 +97,12 @@ export interface AttachSessionArgs {
   /** Respawns the sidecar if cold (post-restart) — Plan 02 ensureVossClient. */
   ensureClient: (
     cwd: string,
-  ) => Promise<{ baseUrl: string; token: string; client: VossClient }>;
+  ) => Promise<{ sidecarId: string; client: SidecarVossClient }>;
   /** Plan 03 App seam: D-02 split + nativeSessionByPaneId bind. */
   openAttachedPane: (record: {
     sessionId: string;
-    baseUrl: string;
-    token: string;
-    client: VossClient;
+    sidecarId: string;
+    client: SidecarVossClient;
   }) => void;
 }
 
@@ -114,12 +113,11 @@ export interface AttachSessionArgs {
  * history fetch (T-V15-12).
  */
 export async function attachSession(args: AttachSessionArgs): Promise<void> {
-  const { baseUrl, token, client } = await args.ensureClient(args.cwd);
+  const { sidecarId, client } = await args.ensureClient(args.cwd);
   registerNativeCard(args.sessionId, args.sessionId);
   args.openAttachedPane({
     sessionId: args.sessionId,
-    baseUrl,
-    token,
+    sidecarId,
     client,
   });
 }

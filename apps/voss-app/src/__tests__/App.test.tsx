@@ -347,7 +347,7 @@ describe('App — project open flow', () => {
     fireEvent.click(el.querySelector('button[aria-label="Open project"]')!);
 
     await waitFor(() => expect(el.textContent).toContain('x'));
-    await waitFor(() => expect(h.loadDefaultLayout).toHaveBeenCalledWith('/tmp/x'));
+    await waitFor(() => expect(h.loadDefaultLayout).toHaveBeenCalledWith('default'));
     expect(h.openProject).toHaveBeenCalledWith('/tmp/x');
     expect(el.querySelector('[data-testid="grid-root"]')).not.toBeNull();
   });

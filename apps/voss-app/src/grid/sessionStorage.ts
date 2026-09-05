@@ -34,16 +34,16 @@ export const SESSION_LOAD_FAILED = 'could not load session';
 // --- Tauri command bridges --------------------------------------------------
 
 export async function saveSession(
-  workspacePath: string,
+  workspaceId: string,
   session: SessionFile,
 ): Promise<void> {
-  await invoke('save_session', { workspacePath, session });
+  await invoke('save_session', { workspaceId, session });
 }
 
 export async function loadSession(
-  workspacePath: string,
+  workspaceId: string,
 ): Promise<SessionFile | null> {
-  return invoke<SessionFile | null>('load_session', { workspacePath });
+  return invoke<SessionFile | null>('load_session', { workspaceId });
 }
 
 export async function saveGlobalSession(

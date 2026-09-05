@@ -31,14 +31,12 @@ export function buildDecisionCommand(
 
 /** Shell the decision via the Rust `run_decision` command (D-08 capture). */
 export async function runDecision(
-  cliBinary: string,
-  cwd: string,
+  _cliBinary: string,
+  _cwd: string,
   action: DecisionAction,
   runId: string,
 ): Promise<DecisionResult> {
   return invoke<DecisionResult>('run_decision', {
-    cliBinary,
-    cwd,
     args: buildDecisionArgs(action, runId),
   });
 }

@@ -13,12 +13,9 @@
 import { createSignal } from 'solid-js';
 
 import type { AgentEvent } from '../../../../../sdk/typescript/src/client/sse';
-import {
-  replyPermission,
-  type PermissionChoice,
-} from '../../../../../sdk/typescript/src/client/permission';
-import { createVossClient } from '../../../../../sdk/typescript/src/client/rest';
+import type { PermissionChoice } from '../../../../../sdk/typescript/src/client/permission';
 import { connectLiveStream, type LiveStreamHandle } from './sseClient';
+import { replySidecarPermission } from './sidecarClient';
 import { resolveAttentionItem } from '../attention/attentionQueue';
 import { devlog } from '../../devlog';
 
@@ -40,7 +37,7 @@ export interface ProtocolSessionState {
   eventCount: number;
   /** The view derives props.onEnded from this — no callbacks stored here. */
   endedReason: 'idle' | 'death' | null;
-  conn: { baseUrl: string; token: string };
+  conn: { sidecarId: string };
 }
 
 export const PROTO_CAP = 300;
@@ -77,8 +74,7 @@ const handles = new Map<string, LiveStreamHandle>();
 const epochs = new Map<string, number>();
 
 export function defaultProtocolState(conn: {
-  baseUrl: string;
-  token: string;
+  sidecarId: string;
 }): ProtocolSessionState {
   return {
     events: [],
@@ -142,16 +138,14 @@ function streamEnded(sessionId: string, epoch: number): void {
 
 function connect(
   sessionId: string,
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
   stream?: AsyncIterable<AgentEvent>,
 ): void {
   const epoch = (epochs.get(sessionId) ?? 0) + 1;
   epochs.set(sessionId, epoch);
   const handle = connectLiveStream({
-    baseUrl,
+    sidecarId,
     sessionId,
-    token,
     cardId: sessionId, // Bridge A: the session id IS the cardId
     stream,
     onEvent: (ev) => appendEvent(sessionId, epoch, ev),
@@ -166,17 +160,16 @@ function connect(
  */
 export function ensureProtocolStream(
   sessionId: string,
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
   stream?: AsyncIterable<AgentEvent>,
 ): void {
   setProtocolSessions((prev) =>
     prev[sessionId]
       ? prev
-      : { ...prev, [sessionId]: defaultProtocolState({ baseUrl, token }) },
+      : { ...prev, [sessionId]: defaultProtocolState({ sidecarId }) },
   );
   if (handles.has(sessionId)) return;
-  connect(sessionId, baseUrl, token, stream);
+  connect(sessionId, sidecarId, stream);
 }
 
 /**
@@ -185,13 +178,12 @@ export function ensureProtocolStream(
  */
 export function reconnectProtocolStream(
   sessionId: string,
-  baseUrl: string,
-  token: string,
+  sidecarId: string,
 ): void {
   handles.get(sessionId)?.abort();
   handles.delete(sessionId);
   setProtocolSessions((prev) => {
-    const st = prev[sessionId] ?? defaultProtocolState({ baseUrl, token });
+    const st = prev[sessionId] ?? defaultProtocolState({ sidecarId });
     return {
       ...prev,
       [sessionId]: {
@@ -202,11 +194,11 @@ export function reconnectProtocolStream(
         sawCleanEnd: false,
         eventCount: 0,
         endedReason: null,
-        conn: { baseUrl, token },
+        conn: { sidecarId },
       },
     };
   });
-  connect(sessionId, baseUrl, token);
+  connect(sessionId, sidecarId);
 }
 
 /**
@@ -238,8 +230,7 @@ export async function replyToProtocolGate(
     });
   setGate({ state: 'inflight', choice });
   try {
-    const client = createVossClient(st.conn.baseUrl, st.conn.token);
-    await replyPermission(client, sessionId, { id, choice });
+    await replySidecarPermission(st.conn.sidecarId, sessionId, id, choice);
     setGate({ state: 'resolved', choice });
     resolveAttentionItem(`permission:${id}`);
   } catch {

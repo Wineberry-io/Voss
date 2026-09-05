@@ -1,5 +1,6 @@
 """Unit tests for SwarmStore, the append-only event log, overlap validation,
 the ownership-policy builder, scoped recall, and the session index (V25-01)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,6 +11,7 @@ from voss.harness.memory_store import Hit
 from voss.harness.permissions import match_permission_rules
 from voss.harness.swarm_store import (
     ASSIGNED,
+    CANDIDATE_READY,
     DONE,
     OPEN,
     OwnershipOverlapError,
@@ -75,6 +77,35 @@ def test_audit_replay_full_timeline(tmp_path: Path) -> None:
     assert store.replay(swarm.id).task(t.id).state == DONE
 
 
+def test_candidate_ready_replays_with_immutable_candidate_identity(
+    tmp_path: Path,
+) -> None:
+    store = SwarmStore(cwd=tmp_path)
+    swarm = store.create(goal="g", cwd=str(tmp_path))
+    task = store.add_task(swarm.id, goal="A", owned_files=["src/a.py"])
+    store.mark_assigned(swarm.id, task.id, session_id="s")
+    store.mark_candidate_ready(
+        swarm.id,
+        task.id,
+        branch="swarm/sw1/builder-1",
+        worktree="/tmp/worktree",
+        head="deadbeef",
+        summary="ready",
+    )
+
+    live = store.get(swarm.id).task(task.id)
+    replayed = store.replay(swarm.id).task(task.id)
+    assert live.state == replayed.state == CANDIDATE_READY
+    assert replayed.candidate_branch == "swarm/sw1/builder-1"
+    assert replayed.candidate_worktree == "/tmp/worktree"
+    assert replayed.candidate_head == "deadbeef"
+    assert store.replay_timeline(swarm.id)[task.id] == [
+        OPEN,
+        ASSIGNED,
+        CANDIDATE_READY,
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Task 2 — overlap, ownership policy, scoped recall, roster, session index
 # ---------------------------------------------------------------------------
@@ -106,7 +137,10 @@ def test_ownership_policy_denies_non_owned(tmp_path: Path) -> None:
         )
     # `./`-prefixed owned path normalizes to the same allow (Pitfall 1).
     policy2 = build_ownership_policy(["./src/a.py"])
-    assert match_permission_rules(policy2.rules, "fs_edit", {"path": "src/a.py"}) == "allow"
+    assert (
+        match_permission_rules(policy2.rules, "fs_edit", {"path": "src/a.py"})
+        == "allow"
+    )
 
 
 def test_recall_scoped_to_owned_files(tmp_path: Path) -> None:

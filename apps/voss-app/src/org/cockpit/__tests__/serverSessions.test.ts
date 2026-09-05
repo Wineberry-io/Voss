@@ -88,8 +88,7 @@ describe('serverSessions — attachSession (D-06, T-V15-08/T-V15-12)', () => {
   it('ensures the client (respawn-if-cold), registers the native card, opens the pane — no history fetch', async () => {
     const client = mockClient();
     const ensureClient = vi.fn().mockResolvedValue({
-      baseUrl: 'http://127.0.0.1:50123',
-      token: 'tok',
+      sidecarId: 'test-sidecar',
       client,
     });
     const openAttachedPane = vi.fn();
@@ -106,8 +105,7 @@ describe('serverSessions — attachSession (D-06, T-V15-08/T-V15-12)', () => {
     expect(cardToSessionNode()['sess-99']).toBe('sess-99');
     expect(openAttachedPane).toHaveBeenCalledWith({
       sessionId: 'sess-99',
-      baseUrl: 'http://127.0.0.1:50123',
-      token: 'tok',
+      sidecarId: 'test-sidecar',
       client,
     });
     // T-V15-12: forward stream only — no backfill/transcript fetch.

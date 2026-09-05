@@ -408,6 +408,8 @@
                 "stream.delta": "#/components/schemas/StreamDelta",
                 "stream.finalize": "#/components/schemas/StreamFinalize",
                 "swarm.assign": "#/components/schemas/SwarmAssign",
+                "swarm.candidate_ready": "#/components/schemas/SwarmCandidateReady",
+                "swarm.candidates_ready": "#/components/schemas/SwarmCandidatesReady",
                 "swarm.complete": "#/components/schemas/SwarmComplete",
                 "swarm.gate": "#/components/schemas/SwarmGate",
                 "swarm.needs_operator": "#/components/schemas/SwarmNeedsOperator",
@@ -488,6 +490,12 @@
               },
               {
                 "$ref": "#/components/schemas/SwarmAssign"
+              },
+              {
+                "$ref": "#/components/schemas/SwarmCandidateReady"
+              },
+              {
+                "$ref": "#/components/schemas/SwarmCandidatesReady"
               },
               {
                 "$ref": "#/components/schemas/SwarmWorkerDone"
@@ -1107,6 +1115,106 @@
           "type"
         ],
         "title": "SwarmAssign",
+        "type": "object"
+      },
+      "SwarmCandidateReady": {
+        "properties": {
+          "branch": {
+            "title": "Branch",
+            "type": "string"
+          },
+          "eid": {
+            "title": "Eid",
+            "type": "string"
+          },
+          "head": {
+            "title": "Head",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Summary"
+          },
+          "swarm_id": {
+            "title": "Swarm Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "swarm.candidate_ready",
+            "default": "swarm.candidate_ready",
+            "title": "Type",
+            "type": "string"
+          },
+          "v": {
+            "default": 1,
+            "title": "V",
+            "type": "integer"
+          },
+          "worktree": {
+            "title": "Worktree",
+            "type": "string"
+          }
+        },
+        "required": [
+          "swarm_id",
+          "task_id",
+          "role",
+          "branch",
+          "worktree",
+          "head",
+          "type"
+        ],
+        "title": "SwarmCandidateReady",
+        "type": "object"
+      },
+      "SwarmCandidatesReady": {
+        "properties": {
+          "candidate_count": {
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "eid": {
+            "title": "Eid",
+            "type": "string"
+          },
+          "swarm_id": {
+            "title": "Swarm Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "swarm.candidates_ready",
+            "default": "swarm.candidates_ready",
+            "title": "Type",
+            "type": "string"
+          },
+          "v": {
+            "default": 1,
+            "title": "V",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "swarm_id",
+          "candidate_count",
+          "type"
+        ],
+        "title": "SwarmCandidatesReady",
         "type": "object"
       },
       "SwarmComplete": {
@@ -2216,7 +2324,7 @@
     },
     "/swarm/{swarm_id}/run": {
       "post": {
-        "description": "Drive the R3 CLI members of a swarm (worktree spawn + ownership +\nfan-in) headlessly. Native roles are untouched \u2014 they run via the\nin-process turn path. Fire-and-forget: the orchestrator streams progress\nover the swarm SSE plane; the route returns immediately.",
+        "description": "Drive the R3 CLI members of a swarm (worktree spawn + ownership +\ncandidate preservation) headlessly. Native roles are untouched \u2014 they run via the\nin-process turn path. Fire-and-forget: the orchestrator streams progress\nover the swarm SSE plane; the route returns immediately.",
         "operationId": "run_swarm_swarm__swarm_id__run_post",
         "parameters": [
           {

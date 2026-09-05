@@ -33,9 +33,7 @@ const EVENTS = [
 describe('sseClient liveGraphPatches — honest live signal', () => {
   it('emits one source-tagged patch per mapped event', async () => {
     const handle = connectLiveStream({
-      baseUrl: '',
       sessionId: 's1',
-      token: '',
       cardId: 'cardA',
       stream: mockStream(EVENTS),
     });
@@ -60,9 +58,7 @@ describe('sseClient liveGraphPatches — honest live signal', () => {
 
   it('does not emit a message patch when the budget threshold is not crossed', async () => {
     const handle = connectLiveStream({
-      baseUrl: '',
       sessionId: 's1',
-      token: '',
       stream: mockStream([
         { type: 'budget.updated', v: 1, session_id: 's1', spent: 2, remaining: 8, limit: 10, unit: 'usd' },
       ]),

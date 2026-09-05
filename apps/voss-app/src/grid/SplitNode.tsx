@@ -28,8 +28,7 @@ export interface CloseUI {
 /** V15-03 (VLIVE-04): native server session backing a structured pane. */
 export interface NativeSessionRecord {
   sessionId: string;
-  baseUrl: string;
-  token: string;
+  sidecarId: string;
 }
 
 /**
@@ -176,10 +175,9 @@ export default function SplitNodeView(props: {
                   nativeSessionId={
                     props.nativeSessionByPaneId?.[asLeaf().id]?.sessionId
                   }
-                  nativeBaseUrl={
-                    props.nativeSessionByPaneId?.[asLeaf().id]?.baseUrl
+                  nativeSidecarId={
+                    props.nativeSessionByPaneId?.[asLeaf().id]?.sidecarId
                   }
-                  nativeToken={props.nativeSessionByPaneId?.[asLeaf().id]?.token}
                 />
               )}
             </Show>

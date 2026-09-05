@@ -463,6 +463,12 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"$ref\": \"#/components/schemas/SwarmAssign\""]
 #[doc = "    },"]
 #[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmCandidateReady\""]
+#[doc = "    },"]
+#[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/SwarmCandidatesReady\""]
+#[doc = "    },"]
+#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/components/schemas/SwarmWorkerDone\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -496,6 +502,8 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"stream.delta\": \"#/components/schemas/StreamDelta\","]
 #[doc = "      \"stream.finalize\": \"#/components/schemas/StreamFinalize\","]
 #[doc = "      \"swarm.assign\": \"#/components/schemas/SwarmAssign\","]
+#[doc = "      \"swarm.candidate_ready\": \"#/components/schemas/SwarmCandidateReady\","]
+#[doc = "      \"swarm.candidates_ready\": \"#/components/schemas/SwarmCandidatesReady\","]
 #[doc = "      \"swarm.complete\": \"#/components/schemas/SwarmComplete\","]
 #[doc = "      \"swarm.gate\": \"#/components/schemas/SwarmGate\","]
 #[doc = "      \"swarm.needs_operator\": \"#/components/schemas/SwarmNeedsOperator\","]
@@ -559,6 +567,10 @@ pub enum AgentEvent {
     GateUpdated(GateUpdated),
     #[serde(rename = "swarm.assign")]
     SwarmAssign(SwarmAssign),
+    #[serde(rename = "swarm.candidate_ready")]
+    SwarmCandidateReady(SwarmCandidateReady),
+    #[serde(rename = "swarm.candidates_ready")]
+    SwarmCandidatesReady(SwarmCandidatesReady),
     #[serde(rename = "swarm.worker_done")]
     SwarmWorkerDone(SwarmWorkerDone),
     #[serde(rename = "swarm.gate")]
@@ -683,6 +695,16 @@ impl ::std::convert::From<SwarmAssign> for AgentEvent {
         Self::SwarmAssign(value)
     }
 }
+impl ::std::convert::From<SwarmCandidateReady> for AgentEvent {
+    fn from(value: SwarmCandidateReady) -> Self {
+        Self::SwarmCandidateReady(value)
+    }
+}
+impl ::std::convert::From<SwarmCandidatesReady> for AgentEvent {
+    fn from(value: SwarmCandidatesReady) -> Self {
+        Self::SwarmCandidatesReady(value)
+    }
+}
 impl ::std::convert::From<SwarmWorkerDone> for AgentEvent {
     fn from(value: SwarmWorkerDone) -> Self {
         Self::SwarmWorkerDone(value)
@@ -789,6 +811,12 @@ impl ::std::convert::From<SwarmComplete> for AgentEvent {
 #[doc = "          \"$ref\": \"#/components/schemas/SwarmAssign\""]
 #[doc = "        },"]
 #[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmCandidateReady\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/SwarmCandidatesReady\""]
+#[doc = "        },"]
+#[doc = "        {"]
 #[doc = "          \"$ref\": \"#/components/schemas/SwarmWorkerDone\""]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -822,6 +850,8 @@ impl ::std::convert::From<SwarmComplete> for AgentEvent {
 #[doc = "          \"stream.delta\": \"#/components/schemas/StreamDelta\","]
 #[doc = "          \"stream.finalize\": \"#/components/schemas/StreamFinalize\","]
 #[doc = "          \"swarm.assign\": \"#/components/schemas/SwarmAssign\","]
+#[doc = "          \"swarm.candidate_ready\": \"#/components/schemas/SwarmCandidateReady\","]
+#[doc = "          \"swarm.candidates_ready\": \"#/components/schemas/SwarmCandidatesReady\","]
 #[doc = "          \"swarm.complete\": \"#/components/schemas/SwarmComplete\","]
 #[doc = "          \"swarm.gate\": \"#/components/schemas/SwarmGate\","]
 #[doc = "          \"swarm.needs_operator\": \"#/components/schemas/SwarmNeedsOperator\","]
@@ -1548,6 +1578,144 @@ pub struct SwarmAssign {
     pub session_id: ::std::string::String,
     pub swarm_id: ::std::string::String,
     pub task_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`SwarmCandidateReady`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmCandidateReady\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"branch\","]
+#[doc = "    \"head\","]
+#[doc = "    \"role\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"task_id\","]
+#[doc = "    \"type\","]
+#[doc = "    \"worktree\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"branch\": {"]
+#[doc = "      \"title\": \"Branch\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"head\": {"]
+#[doc = "      \"title\": \"Head\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"role\": {"]
+#[doc = "      \"title\": \"Role\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"summary\": {"]
+#[doc = "      \"title\": \"Summary\","]
+#[doc = "      \"default\": null,"]
+#[doc = "      \"anyOf\": ["]
+#[doc = "        {"]
+#[doc = "          \"type\": \"string\""]
+#[doc = "        },"]
+#[doc = "        {"]
+#[doc = "          \"type\": \"null\""]
+#[doc = "        }"]
+#[doc = "      ]"]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"task_id\": {"]
+#[doc = "      \"title\": \"Task Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.candidate_ready\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.candidate_ready\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"worktree\": {"]
+#[doc = "      \"title\": \"Worktree\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmCandidateReady {
+    pub branch: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    pub head: ::std::string::String,
+    pub role: ::std::string::String,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub summary: ::std::option::Option<::std::string::String>,
+    pub swarm_id: ::std::string::String,
+    pub task_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+    pub worktree: ::std::string::String,
+}
+#[doc = "`SwarmCandidatesReady`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"SwarmCandidatesReady\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"candidate_count\","]
+#[doc = "    \"swarm_id\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"candidate_count\": {"]
+#[doc = "      \"title\": \"Candidate Count\","]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"eid\": {"]
+#[doc = "      \"title\": \"Eid\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"swarm_id\": {"]
+#[doc = "      \"title\": \"Swarm Id\","]
+#[doc = "      \"type\": \"string\""]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"swarm.candidates_ready\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"swarm.candidates_ready\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct SwarmCandidatesReady {
+    pub candidate_count: i64,
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+    pub eid: ::std::option::Option<::std::string::String>,
+    pub swarm_id: ::std::string::String,
     #[serde(default = "defaults::default_u64::<i64, 1>")]
     pub v: i64,
 }

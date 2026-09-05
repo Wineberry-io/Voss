@@ -51,6 +51,7 @@ import {
 
 function makeCtx(projectPath: string | null = '/ws'): SessionContext {
   return {
+    workspaceId: 'ws-1',
     getRoot: () => ({
       kind: 'pane',
       id: 'a',
@@ -115,12 +116,12 @@ describe('installStructuralSessionAutosave', () => {
     expect(h.saveSession).not.toHaveBeenCalled();
   });
 
-  it('uses saveSession with project path', () => {
+  it('uses saveSession with workspace ID', () => {
     installStructuralSessionAutosave(makeCtx('/my/project'));
     fireStructuralChange();
     vi.advanceTimersByTime(2000);
 
-    expect(h.saveSession).toHaveBeenCalledWith('/my/project', expect.anything());
+    expect(h.saveSession).toHaveBeenCalledWith('ws-1', expect.anything());
   });
 
   it('cleanup clears pending timer and unsubscribes', () => {

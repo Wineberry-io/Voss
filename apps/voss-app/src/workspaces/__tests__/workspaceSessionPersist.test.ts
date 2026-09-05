@@ -134,7 +134,7 @@ describe('installAllWorkspacesCloseSave', () => {
     expect(h.buildSessionFile).toHaveBeenCalledTimes(2);
     expect(h.saveSession).toHaveBeenCalledTimes(1);
     expect(h.saveSession).toHaveBeenCalledWith(
-      '/proj/a',
+      'ws-a',
       expect.objectContaining({ projectLessAccepted: true }),
     );
     expect(h.saveProjectLessSession).toHaveBeenCalledTimes(1);

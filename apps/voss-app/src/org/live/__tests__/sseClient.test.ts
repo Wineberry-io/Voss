@@ -58,9 +58,7 @@ describe('live SSE consumer — VCKP-06 (../sseClient)', () => {
 
   it('drives mockSseStream into ingestEvent + the live overlay with no manual refresh, label -> live', async () => {
     const handle = connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       stream: mockSseStream(SESSION),
     });
 
@@ -111,9 +109,7 @@ describe('live SSE consumer — VCKP-06 (../sseClient)', () => {
     }
 
     const handle = connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       stream: oneBudget(),
     });
 
@@ -144,9 +140,7 @@ describe('live SSE consumer — VCKP-06 (../sseClient)', () => {
     }
 
     const handle = connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       stream: infinite(),
     });
 
@@ -172,9 +166,7 @@ describe('live SSE consumer — V15-02 extensions (../sseClient)', () => {
   it('onEvent receives every event from an injected stream', async () => {
     const seen: AgentEvent[] = [];
     const handle = connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       stream: mockSseStream(SESSION),
       onEvent: (ev) => seen.push(ev),
     });
@@ -201,9 +193,7 @@ describe('live SSE consumer — V15-02 extensions (../sseClient)', () => {
     }
 
     const handle = connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       cardId: 'card-77',
       stream: onePermission(),
     });
@@ -234,9 +224,7 @@ describe('live SSE consumer — V15-02 extensions (../sseClient)', () => {
     }
 
     connectLiveStream({
-      baseUrl: 'http://localhost:0',
       sessionId: SESSION,
-      token: 'tok',
       stream: heldOpen(),
     });
 
@@ -278,8 +266,8 @@ describe('live SSE consumer — V15-02 extensions (../sseClient)', () => {
     }
 
     // A is a short finite stream; B stays open (a swarm launches many at once).
-    connectLiveStream({ baseUrl: 'http://localhost:0', sessionId: SESSION, token: 'tok', stream: finite() });
-    connectLiveStream({ baseUrl: 'http://localhost:0', sessionId: SESSION_B, token: 'tok', stream: heldOpen() });
+    connectLiveStream({ sessionId: SESSION, stream: finite() });
+    connectLiveStream({ sessionId: SESSION_B, stream: heldOpen() });
 
     await flush();
     // A has ended; B is still live → the label must NOT have flipped to snapshot.

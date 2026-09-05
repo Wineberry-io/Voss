@@ -568,7 +568,7 @@ async def _drive_sdk_python(
         permissions = PermissionGate(mode=spec.mode, auto_yes=spec.auto_approve_edits)
         result = await run_turn(
             spec.prompt,
-            tools=make_toolset(cwd),
+            tools=make_toolset(cwd, background_indexing=False),
             cwd=cwd,
             renderer=PlainRenderer(),
             model=model,
@@ -599,7 +599,7 @@ async def _drive_resume(
         task = asyncio.create_task(
             run_turn(
                 spec.prompt,
-                tools=make_toolset(cwd, net=net_session),
+                tools=make_toolset(cwd, net=net_session, background_indexing=False),
                 cwd=cwd,
                 renderer=PlainRenderer(),
                 model=model,
@@ -621,7 +621,7 @@ async def _drive_resume(
         record, history = load(record.id, cwd=cwd)
         result = await run_turn(
             spec.prompt,
-            tools=make_toolset(cwd, net=net_session),
+            tools=make_toolset(cwd, net=net_session, background_indexing=False),
             cwd=cwd,
             renderer=PlainRenderer(),
             model=model,
@@ -705,7 +705,9 @@ async def _drive_task(
             try:
                 result = await run_turn(
                     spec.prompt,
-                    tools=make_toolset(cwd, net=net_session),
+                    tools=make_toolset(
+                        cwd, net=net_session, background_indexing=False
+                    ),
                     cwd=cwd,
                     renderer=PlainRenderer(),
                     model=model,
