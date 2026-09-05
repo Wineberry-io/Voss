@@ -24,7 +24,7 @@ import {
   applySessionFile,
   layoutToSession,
 } from '../sessionCommands';
-import type { SessionFile } from '../sessionStorage';
+import type { SessionFileV1 } from '../sessionStorage';
 import type { LayoutFile } from '../layoutStorage';
 import {
   SESSION_SAVE_FAILED,
@@ -53,10 +53,10 @@ function makeSessionFile(
     activePreset?: string | null;
     projectLessAccepted?: boolean;
   },
-): SessionFile {
+): SessionFileV1 {
   return {
     version: 1,
-    activePreset: (opts?.activePreset as SessionFile['activePreset']) ?? null,
+    activePreset: (opts?.activePreset as SessionFileV1['activePreset']) ?? null,
     grid: { root, focusedId },
     panes,
     projectLessAccepted: opts?.projectLessAccepted ?? false,
@@ -165,7 +165,7 @@ describe('PER-03 — project-less global session bypasses setup', () => {
 // ---------------------------------------------------------------------------
 
 describe('PER-04 — corrupt session fallback via layoutToSession', () => {
-  it('layoutToSession converts a default LayoutFile to a SessionFile for fallback', () => {
+  it('layoutToSession converts a default LayoutFile to a SessionFileV1 for fallback', () => {
     const leaves = makePanes(2, { cwd: '/repo', shell: 'zsh' });
     const layout: LayoutFile = {
       version: 1,

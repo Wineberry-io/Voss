@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { GridStore } from './tree';
 import type { LayoutPreset } from './layoutPresets';
+import type { CanvasState } from '../canvas/model';
 
 /**
  * Frontend bridge for A6-01 Rust session persistence commands. Mirrors
@@ -17,14 +18,26 @@ export type SessionPane = {
   scrollback: string[] | null;
 };
 
-/** Wire-level session shape — mirrors Rust `SessionFile`. */
-export type SessionFile = {
+/** v1 (split tree) — still loadable; migrated to v2 on first save. */
+export type SessionFileV1 = {
   version: 1;
   activePreset: LayoutPreset | null;
   grid: GridStore;
   panes: SessionPane[];
   projectLessAccepted: boolean;
 };
+
+/** v2 (free canvas) — mirrors Rust `SessionFile` with `canvas` set. */
+export type SessionFileV2 = {
+  version: 2;
+  activePreset: LayoutPreset | null;
+  canvas: CanvasState;
+  panes: SessionPane[];
+  projectLessAccepted: boolean;
+};
+
+/** Wire-level session shape — mirrors Rust `SessionFile`. */
+export type SessionFile = SessionFileV1 | SessionFileV2;
 
 // --- Error copy constants (match Rust SessionError::Display) ----------------
 

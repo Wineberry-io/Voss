@@ -127,6 +127,8 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 ## S1 — Desktop host refactor + canvas skeleton
 
+**Status:** executed 2026-09-05 on branch `s1-canvas-host`. Grid tree modules stay in tree unmounted until S2 deletes them; `GridRoot` tests still run against the legacy tree.
+
 **Goal:** the canvas host exists, every existing pane renders as a free node, PTYs survive, nothing the user could do before is lost. Free-floating from day one (decision 1), so this sprint also retires the split tree as the persisted root.
 
 ### Tasks
@@ -150,13 +152,13 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 ### Definition of done
 
-- [ ] `App.tsx` ≤ 300 lines; four host modules with their own tests
-- [ ] `canvas/` model, store, geometry, migrate with unit tests
-- [ ] `canvas.rs` + `session.rs` v2 + v1 migration; `cargo test -p voss-app-core` green
-- [ ] `CanvasRoot` mounted per workspace; `GridRoot` unmounted
-- [ ] All existing keybindings resolve to canvas ops; `command-palette/__tests__/registry.test.ts` green
-- [ ] `pnpm test` green; `pnpm test:e2e` green with the replaced specs
-- [ ] `pnpm check:xterm-pin` green (5.5.0 untouched)
+- [x] `App.tsx` 47 lines; five host modules (`workspaceHost`, `viewRouter`, `keymapHost`, `liveBoot`, `agentHost`) + `AppShell.tsx`; existing App/a5/liveReview tests cover them through the composition root
+- [x] `canvas/` model, store, geometry, arrange, migrate, session with unit tests (`src/canvas/__tests__/`)
+- [x] `canvas.rs` + `session.rs` v2 (accepts v1, TS migrates) + `layouts.rs` optional nodes/view; `cargo test -p voss-app-core` green (157)
+- [x] `CanvasRoot` mounted per workspace; `GridRoot` unmounted
+- [x] All existing keybindings resolve to canvas ops; ⌘0 / ⌘⇧0 added; registry tests green
+- [x] `pnpm test` green (993); mock-IPC e2e green (29) with `canvas-basics.spec.ts` replacing `grid-integration`, `session-persist`, `pane-drag-rearrange`
+- [x] `pnpm check:xterm-pin` green (5.5.0 untouched)
 
 ### Acceptance criteria
 
@@ -496,4 +498,11 @@ AC-S0-4 — tests/harness/test_instructions_injection.py::test_ac_s0_4_block_ord
 AC-S0-5 — tests/harness/test_permissions_observe.py (TestGate: denied_without_prompt, project_allow_rule_does_not_override, auto_yes_does_not_widen, remembered_always_does_not_override) — 2026-09-05
 AC-S0-6 — tests/harness/test_observe_mode_run.py::test_ac_s0_6_observe_turn_reads_denies_writes_records_hash — 2026-09-05
 AC-S0-7 — tests/harness/test_instructions.py::test_ac_s0_7_global_files_opt_in — 2026-09-05
+AC-S1-1 — src/canvas/__tests__/CanvasRoot.test.tsx (v1 split session restores) + e2e/canvas-basics.spec.ts canvas-ac1 — 2026-09-05
+AC-S1-2 — src/canvas/__tests__/CanvasRoot.test.tsx (pan, zoom, move, resize never remount); manual `top` check pending — 2026-09-05
+AC-S1-3 — src/canvas/__tests__/CanvasRoot.test.tsx (⌘D adjacency) + e2e canvas-ac3 — 2026-09-05
+AC-S1-4 — src/canvas/__tests__/CanvasRoot.test.tsx (drag left → index 1) + src/canvas/__tests__/store.test.ts — 2026-09-05
+AC-S1-5 — src/canvas/__tests__/CanvasRoot.test.tsx (view reaches mirror after debounce) + session.test.ts view round-trip — 2026-09-05
+AC-S1-6 — src/__tests__/App.test.tsx, a5-acceptance, liveReviewToggle pass against the canvas host — 2026-09-05
+AC-S1-7 — src/canvas/__tests__/CanvasRoot.test.tsx (boots to one node at origin) + e2e canvas-ac7 — 2026-09-05
 ```

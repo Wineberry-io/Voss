@@ -1,0 +1,197 @@
+/**
+ * Canvas ↔ session.json / layout file helpers (S1). Pure: no DOM, Solid,
+ * Tauri, or xterm. Callers own scrollback extraction and store assignment.
+ */
+import type { ActiveLayout, LayoutPreset } from '../grid/layoutPresets';
+import type { LayoutFile } from '../grid/layoutStorage';
+import type { SessionFile, SessionFileV2, SessionPane } from '../grid/sessionStorage';
+import type { GridStore, TreeNode } from '../grid/tree';
+import { gridToCanvas } from './migrate';
+import {
+  defaultView,
+  makeNode,
+  orderedNodes,
+  recomputeIndices,
+  type CanvasNode,
+  type CanvasState,
+} from './model';
+
+const MAX_SCROLLBACK_LINES = 2000;
+
+export type CanvasRestoreResult = {
+  canvas: CanvasState;
+  activeLayout: ActiveLayout;
+  restoredScrollbackByPaneId: Map<string, string[]>;
+};
+
+function cloneNode(n: CanvasNode): CanvasNode {
+  return {
+    id: n.id,
+    kind: n.kind,
+    x: n.x,
+    y: n.y,
+    w: n.w,
+    h: n.h,
+    z: n.z,
+    index: n.index,
+    cwd: n.cwd,
+    shell: n.shell,
+  };
+}
+
+/** Whitelist copy: runtime fields can never reach disk. */
+export function cloneCanvas(state: CanvasState): CanvasState {
+  return {
+    nodes: state.nodes.map(cloneNode),
+    view: { x: state.view.x, y: state.view.y, zoom: state.view.zoom },
+    focusedId: state.focusedId,
+  };
+}
+
+function resolveFocus(state: CanvasState): string {
+  if (state.nodes.some((n) => n.id === state.focusedId)) return state.focusedId;
+  return orderedNodes(state)[0]!.id;
+}
+
+export function buildSessionFile(
+  state: CanvasState,
+  activeLayout: ActiveLayout,
+  scrollbackByPaneId: Map<string, string[]>,
+  projectLessAccepted: boolean,
+): SessionFileV2 {
+  const canvas = cloneCanvas(state);
+  const panes: SessionPane[] = orderedNodes(canvas).map((n) => {
+    const lines = scrollbackByPaneId.get(n.id) ?? null;
+    return { id: n.id, scrollback: lines ? lines.slice(-MAX_SCROLLBACK_LINES) : null };
+  });
+  return {
+    version: 2,
+    activePreset: activeLayout === 'custom' ? null : activeLayout,
+    canvas,
+    panes,
+    projectLessAccepted,
+  };
+}
+
+/** Load either version. v1 trees become nodes via the migration box. */
+export function applySessionFile(session: SessionFile): CanvasRestoreResult {
+  const canvas =
+    session.version === 2 ? cloneCanvas(session.canvas) : gridToCanvas(session.grid);
+  recomputeIndices(canvas.nodes);
+  canvas.focusedId = resolveFocus(canvas);
+  const activeLayout: ActiveLayout = session.activePreset
+    ? (session.activePreset as LayoutPreset)
+    : 'custom';
+  const ids = new Set(canvas.nodes.map((n) => n.id));
+  const restoredScrollbackByPaneId = new Map<string, string[]>();
+  for (const pane of session.panes) {
+    if (pane.scrollback && ids.has(pane.id)) {
+      restoredScrollbackByPaneId.set(pane.id, pane.scrollback);
+    }
+  }
+  return { canvas, activeLayout, restoredScrollbackByPaneId };
+}
+
+/** Nodes a layout describes: its own canvas geometry, else its migrated tree. */
+export function layoutCanvas(layout: LayoutFile): CanvasState {
+  if (layout.nodes && layout.nodes.length > 0) {
+    const nodes = layout.nodes.map(cloneNode);
+    recomputeIndices(nodes);
+    const grid = layout.grid as GridStore | undefined;
+    const focusedId =
+      grid && nodes.some((n) => n.id === grid.focusedId) ? grid.focusedId : nodes[0]!.id;
+    return { nodes, view: layout.view ?? defaultView(), focusedId };
+  }
+  return gridToCanvas(layout.grid);
+}
+
+export function layoutToSession(
+  layout: LayoutFile,
+  projectLessAccepted: boolean,
+): SessionFileV2 {
+  const canvas = layoutCanvas(layout);
+  return {
+    version: 2,
+    activePreset: layout.activePreset,
+    canvas,
+    panes: orderedNodes(canvas).map((n) => ({ id: n.id, scrollback: null })),
+    projectLessAccepted,
+  };
+}
+
+/** Equal-width H chain of leaves: the `grid` a layout file still has to carry. */
+function chainTree(nodes: readonly CanvasNode[]): TreeNode {
+  const leaf = (n: CanvasNode): TreeNode => ({
+    kind: 'pane',
+    id: n.id,
+    cwd: n.cwd,
+    shell: n.shell,
+    index: n.index,
+  });
+  const build = (rest: readonly CanvasNode[]): TreeNode =>
+    rest.length === 1
+      ? leaf(rest[0])
+      : { kind: 'split', orientation: 'H', ratio: 1 / rest.length, left: leaf(rest[0]), right: build(rest.slice(1)) };
+  return build(nodes);
+}
+
+export function serializeLayout(
+  state: CanvasState,
+  activeLayout: ActiveLayout,
+): LayoutFile {
+  const canvas = cloneCanvas(state);
+  const ordered = orderedNodes(canvas);
+  return {
+    version: 1,
+    activePreset: activeLayout === 'custom' ? null : activeLayout,
+    grid: { root: chainTree(ordered), focusedId: canvas.focusedId },
+    nodes: ordered,
+    view: canvas.view,
+  };
+}
+
+export type LayoutApplyResult = {
+  canvas: CanvasState;
+  activeLayout: ActiveLayout;
+};
+
+/**
+ * Apply a saved layout to live nodes without destroying any. Existing nodes
+ * take the saved rects in reading order; extra saved slots spawn fresh nodes
+ * with the saved cwd/shell; extra live nodes keep their place.
+ */
+export function applyLayoutToCanvas(
+  current: CanvasState,
+  layout: LayoutFile,
+): LayoutApplyResult {
+  const saved = orderedNodes(layoutCanvas(layout));
+  const live = orderedNodes(cloneCanvas(current));
+  const next: CanvasNode[] = [];
+  const count = Math.max(saved.length, live.length);
+  for (let i = 0; i < count; i += 1) {
+    const s = saved[i];
+    const l = live[i];
+    if (s && l) {
+      next.push({ ...l, x: s.x, y: s.y, w: s.w, h: s.h, z: s.z });
+    } else if (s) {
+      next.push({ ...makeNode({ cwd: s.cwd, shell: s.shell, x: s.x, y: s.y, w: s.w, h: s.h }), z: s.z });
+    } else if (l) {
+      next.push(l);
+    }
+  }
+  recomputeIndices(next);
+  const savedFocus = layout.grid?.focusedId;
+  const focusedId =
+    savedFocus && next.some((n) => n.id === savedFocus)
+      ? savedFocus
+      : next.some((n) => n.id === current.focusedId)
+        ? current.focusedId
+        : next[0]!.id;
+  const activeLayout: ActiveLayout = layout.activePreset
+    ? (layout.activePreset as LayoutPreset)
+    : 'custom';
+  return {
+    canvas: { nodes: next, view: layout.view ?? current.view, focusedId },
+    activeLayout,
+  };
+}

@@ -10,7 +10,7 @@ import {
   loadSession,
   saveGlobalSession,
   loadGlobalSession,
-  type SessionFile,
+  type SessionFileV1,
 } from '../sessionStorage';
 
 /**
@@ -20,7 +20,7 @@ import {
  * `apps/voss-app/src-tauri/src/lib.rs` (A6-01) exactly.
  */
 
-function makeSession(): SessionFile {
+function makeSession(): SessionFileV1 {
   return {
     version: 1,
     activePreset: 'fanout',
@@ -60,7 +60,7 @@ describe('sessionStorage — project session commands', () => {
     });
   });
 
-  it('loadSession → invoke("load_session", { workspaceId }) returns SessionFile', async () => {
+  it('loadSession → invoke("load_session", { workspaceId }) returns SessionFileV1', async () => {
     const session = makeSession();
     h.invoke.mockResolvedValueOnce(session);
     const got = await loadSession('ws-1');
@@ -90,7 +90,7 @@ describe('sessionStorage — global session commands', () => {
     });
   });
 
-  it('loadGlobalSession → invoke("load_global_session") returns SessionFile | null', async () => {
+  it('loadGlobalSession → invoke("load_global_session") returns SessionFileV1 | null', async () => {
     h.invoke.mockResolvedValueOnce(null);
     const missing = await loadGlobalSession();
     expect(h.invoke).toHaveBeenCalledWith('load_global_session');

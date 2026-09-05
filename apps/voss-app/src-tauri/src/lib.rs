@@ -15,6 +15,7 @@ use voss_app_core::agent_registry::{
 };
 use voss_app_core::appearance::{self, AppearanceSettings};
 use voss_app_core::fonts;
+use voss_app_core::canvas::{self, CanvasState};
 use voss_app_core::grid::{self, GridState};
 use voss_app_core::keymap::{self, KeymapOverrideFile, KeymapProfile, KeymapValidationResult};
 use voss_app_core::layouts::{self, LayoutFile};
@@ -919,6 +920,18 @@ fn sync_grid(state: GridSlot<'_>, new_state: GridState) -> Result<(), String> {
 #[tauri::command]
 fn get_grid(state: GridSlot<'_>) -> Result<GridState, String> {
     grid::snapshot(state.inner())
+}
+
+type CanvasSlot<'a> = tauri::State<'a, Mutex<CanvasState>>;
+
+#[tauri::command]
+fn sync_canvas(state: CanvasSlot<'_>, new_state: CanvasState) -> Result<(), String> {
+    canvas::overwrite(state.inner(), new_state)
+}
+
+#[tauri::command]
+fn get_canvas(state: CanvasSlot<'_>) -> Result<CanvasState, String> {
+    canvas::snapshot(state.inner())
 }
 
 // ---- Layout persistence commands (A4-03, LAY-06/07) -----------------------
@@ -2184,6 +2197,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(PtyRegistry::default()))
         .manage(Mutex::new(GridState::default()))
+        .manage(Mutex::new(CanvasState::default()))
         .manage(Mutex::new(AgentRegistryMap::new()))
         .manage(SwarmWatchState::default())
         .manage(KeymapWatchState::default())
@@ -2211,6 +2225,8 @@ pub fn run() {
             sweep_orphan_agents,
             sync_grid,
             get_grid,
+            sync_canvas,
+            get_canvas,
             save_layout,
             load_layout,
             list_layouts,

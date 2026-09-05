@@ -2,6 +2,7 @@
 
 pub mod agent_registry;
 pub mod appearance;
+pub mod canvas;
 pub mod fonts;
 pub mod grid;
 pub mod keymap;

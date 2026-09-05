@@ -4,7 +4,7 @@
 > 2. **First adapter is the Voss PTY via OSC 133/OSC 7 in `crates/voss-app-core/src/pty/reader.rs`.** Warp is backlog. The "works in Warp" line in §12 does not apply.
 > 3. **Provider billing flag.** Subscription-backed providers (`--auth=claude`, `--auth=codex`) are flat-rate: admission uses call/token/time limits, not the "unknown price disables admission" rule in OBS-04.
 > 4. **Findings render as canvas nodes** beside the failing terminal, not as a separate Observe portal surface (OBS-09). Enrollment/pause live in Settings; events in a drawer.
-> 5. `apps/voss-app/src/orchestration/OrchestrationConsole.tsx` does not exist. The live wiring is `App.tsx` + `src/org/live/*` + `src/portal/PortalShell.tsx`.
+> 5. `apps/voss-app/src/orchestration/OrchestrationConsole.tsx` landed on `dev` after this brief's baseline was inspected against a stale snapshot; it exists on `master` now. The in-app live wiring is `src/app/liveBoot.ts` + `src/org/live/*` + `src/portal/PortalShell.tsx`.
 > 6. `plan` mode prompts for writes; it does not deny them. A fourth mode `observe` is added to `voss/harness/permissions.py`.
 > 7. §9 Laravel is covered by `.planning/notes/laravel-account-control-plane-plan.md`.
 

@@ -127,7 +127,7 @@ vi.mock('@tauri-apps/api/window', () => ({
   })),
 }));
 
-vi.mock('../grid/GridRoot', () => ({
+vi.mock('../canvas/CanvasRoot', () => ({
   default: (props: {
     active?: () => boolean;
     controllerRef?: (ctrl: {
