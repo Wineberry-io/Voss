@@ -101,8 +101,10 @@ mod tests {
     #[test]
     fn overwrite_then_snapshot() {
         let slot = Mutex::new(CanvasState::default());
-        let mut next = CanvasState::default();
-        next.focused_id = "n2".into();
+        let next = CanvasState {
+            focused_id: "n2".into(),
+            ..CanvasState::default()
+        };
         overwrite(&slot, next.clone()).unwrap();
         assert_eq!(snapshot(&slot).unwrap(), next);
     }
