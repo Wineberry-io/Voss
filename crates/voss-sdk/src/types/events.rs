@@ -442,6 +442,9 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"$ref\": \"#/components/schemas/PrinciplesOverflow\""]
 #[doc = "    },"]
 #[doc = "    {"]
+#[doc = "      \"$ref\": \"#/components/schemas/InstructionsOverflow\""]
+#[doc = "    },"]
+#[doc = "    {"]
 #[doc = "      \"$ref\": \"#/components/schemas/WarningEvent\""]
 #[doc = "    },"]
 #[doc = "    {"]
@@ -488,6 +491,7 @@ pub struct ConfidenceUpdated {
 #[doc = "      \"confidence.updated\": \"#/components/schemas/ConfidenceUpdated\","]
 #[doc = "      \"final\": \"#/components/schemas/FinalEvent\","]
 #[doc = "      \"gate.updated\": \"#/components/schemas/GateUpdated\","]
+#[doc = "      \"instructions_overflow\": \"#/components/schemas/InstructionsOverflow\","]
 #[doc = "      \"permission.updated\": \"#/components/schemas/PermissionUpdated\","]
 #[doc = "      \"plan\": \"#/components/schemas/PlanEvent\","]
 #[doc = "      \"principles_overflow\": \"#/components/schemas/PrinciplesOverflow\","]
@@ -549,6 +553,8 @@ pub enum AgentEvent {
     CognitionOverflow(CognitionOverflow),
     #[serde(rename = "principles_overflow")]
     PrinciplesOverflow(PrinciplesOverflow),
+    #[serde(rename = "instructions_overflow")]
+    InstructionsOverflow(InstructionsOverflow),
     #[serde(rename = "warning")]
     WarningEvent(WarningEvent),
     #[serde(rename = "probable")]
@@ -652,6 +658,11 @@ impl ::std::convert::From<CognitionOverflow> for AgentEvent {
 impl ::std::convert::From<PrinciplesOverflow> for AgentEvent {
     fn from(value: PrinciplesOverflow) -> Self {
         Self::PrinciplesOverflow(value)
+    }
+}
+impl ::std::convert::From<InstructionsOverflow> for AgentEvent {
+    fn from(value: InstructionsOverflow) -> Self {
+        Self::InstructionsOverflow(value)
     }
 }
 impl ::std::convert::From<WarningEvent> for AgentEvent {
@@ -779,6 +790,9 @@ impl ::std::convert::From<SwarmComplete> for AgentEvent {
 #[doc = "          \"$ref\": \"#/components/schemas/PrinciplesOverflow\""]
 #[doc = "        },"]
 #[doc = "        {"]
+#[doc = "          \"$ref\": \"#/components/schemas/InstructionsOverflow\""]
+#[doc = "        },"]
+#[doc = "        {"]
 #[doc = "          \"$ref\": \"#/components/schemas/WarningEvent\""]
 #[doc = "        },"]
 #[doc = "        {"]
@@ -825,6 +839,7 @@ impl ::std::convert::From<SwarmComplete> for AgentEvent {
 #[doc = "          \"confidence.updated\": \"#/components/schemas/ConfidenceUpdated\","]
 #[doc = "          \"final\": \"#/components/schemas/FinalEvent\","]
 #[doc = "          \"gate.updated\": \"#/components/schemas/GateUpdated\","]
+#[doc = "          \"instructions_overflow\": \"#/components/schemas/InstructionsOverflow\","]
 #[doc = "          \"permission.updated\": \"#/components/schemas/PermissionUpdated\","]
 #[doc = "          \"plan\": \"#/components/schemas/PlanEvent\","]
 #[doc = "          \"principles_overflow\": \"#/components/schemas/PrinciplesOverflow\","]
@@ -954,6 +969,60 @@ pub struct GateUpdated {
     pub decision: ::std::string::String,
     pub gate: ::std::string::String,
     pub session_id: ::std::string::String,
+    #[serde(default = "defaults::default_u64::<i64, 1>")]
+    pub v: i64,
+}
+#[doc = "`InstructionsOverflow`"]
+#[doc = r""]
+#[doc = r" <details><summary>JSON schema</summary>"]
+#[doc = r""]
+#[doc = r" ```json"]
+#[doc = "{"]
+#[doc = "  \"title\": \"InstructionsOverflow\","]
+#[doc = "  \"type\": \"object\","]
+#[doc = "  \"required\": ["]
+#[doc = "    \"instructions_tokens\","]
+#[doc = "    \"type\""]
+#[doc = "  ],"]
+#[doc = "  \"properties\": {"]
+#[doc = "    \"budget\": {"]
+#[doc = "      \"title\": \"Budget\","]
+#[doc = "      \"default\": 4000,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"instructions_tokens\": {"]
+#[doc = "      \"title\": \"Instructions Tokens\","]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    },"]
+#[doc = "    \"truncated\": {"]
+#[doc = "      \"title\": \"Truncated\","]
+#[doc = "      \"type\": \"array\","]
+#[doc = "      \"items\": {"]
+#[doc = "        \"type\": \"string\""]
+#[doc = "      }"]
+#[doc = "    },"]
+#[doc = "    \"type\": {"]
+#[doc = "      \"title\": \"Type\","]
+#[doc = "      \"default\": \"instructions_overflow\","]
+#[doc = "      \"type\": \"string\","]
+#[doc = "      \"const\": \"instructions_overflow\""]
+#[doc = "    },"]
+#[doc = "    \"v\": {"]
+#[doc = "      \"title\": \"V\","]
+#[doc = "      \"default\": 1,"]
+#[doc = "      \"type\": \"integer\""]
+#[doc = "    }"]
+#[doc = "  }"]
+#[doc = "}"]
+#[doc = r" ```"]
+#[doc = r" </details>"]
+#[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
+pub struct InstructionsOverflow {
+    #[serde(default = "defaults::default_u64::<i64, 4000>")]
+    pub budget: i64,
+    pub instructions_tokens: i64,
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    pub truncated: ::std::vec::Vec<::std::string::String>,
     #[serde(default = "defaults::default_u64::<i64, 1>")]
     pub v: i64,
 }

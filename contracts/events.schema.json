@@ -314,6 +314,43 @@
       "title": "GateUpdated",
       "type": "object"
     },
+    "InstructionsOverflow": {
+      "properties": {
+        "budget": {
+          "default": 4000,
+          "title": "Budget",
+          "type": "integer"
+        },
+        "instructions_tokens": {
+          "title": "Instructions Tokens",
+          "type": "integer"
+        },
+        "truncated": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Truncated",
+          "type": "array"
+        },
+        "type": {
+          "const": "instructions_overflow",
+          "default": "instructions_overflow",
+          "title": "Type",
+          "type": "string"
+        },
+        "v": {
+          "default": 1,
+          "title": "V",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "instructions_tokens",
+        "type"
+      ],
+      "title": "InstructionsOverflow",
+      "type": "object"
+    },
     "PermissionUpdated": {
       "properties": {
         "args": {
@@ -1124,6 +1161,7 @@
           "confidence.updated": "#/components/schemas/ConfidenceUpdated",
           "final": "#/components/schemas/FinalEvent",
           "gate.updated": "#/components/schemas/GateUpdated",
+          "instructions_overflow": "#/components/schemas/InstructionsOverflow",
           "permission.updated": "#/components/schemas/PermissionUpdated",
           "plan": "#/components/schemas/PlanEvent",
           "principles_overflow": "#/components/schemas/PrinciplesOverflow",
@@ -1195,6 +1233,9 @@
         },
         {
           "$ref": "#/components/schemas/PrinciplesOverflow"
+        },
+        {
+          "$ref": "#/components/schemas/InstructionsOverflow"
         },
         {
           "$ref": "#/components/schemas/WarningEvent"

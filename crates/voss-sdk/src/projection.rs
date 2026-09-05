@@ -80,6 +80,7 @@ impl TryFrom<&AgentEvent> for UiProjection {
             AgentEvent::CognitionLoaded(_) => Err(()),
             AgentEvent::CognitionOverflow(_) => Err(()),
             AgentEvent::PrinciplesOverflow(_) => Err(()),
+            AgentEvent::InstructionsOverflow(_) => Err(()),
             AgentEvent::ProbableEvent(_) => Err(()),
             AgentEvent::BudgetUpdated(_) => Err(()),
             AgentEvent::ConfidenceUpdated(_) => Err(()),

@@ -144,6 +144,13 @@ class PrinciplesOverflow(_Base):
     budget: int = 1000
 
 
+class InstructionsOverflow(_Base):
+    type: Literal["instructions_overflow"] = "instructions_overflow"
+    instructions_tokens: int
+    budget: int = 4000
+    truncated: list[str] = Field(default_factory=list)
+
+
 class WarningEvent(_Base):
     type: Literal["warning"] = "warning"
     message: str
@@ -280,6 +287,7 @@ AgentEvent = Annotated[
         CognitionLoaded,
         CognitionOverflow,
         PrinciplesOverflow,
+        InstructionsOverflow,
         WarningEvent,
         ProbableEvent,
         BudgetUpdated,
