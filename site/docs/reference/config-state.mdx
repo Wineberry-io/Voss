@@ -18,6 +18,32 @@ voss config
 voss config --show
 ```
 
+### `[instructions]`
+
+Controls how `AGENTS.md` and `CLAUDE.md` are loaded into every native run (see `voss instructions show`).
+
+```toml
+[instructions]
+enabled = true          # inject the bundle as the `## Instructions` prompt block
+budget_tokens = 4000    # total budget; overflow is reported as instructions_overflow
+per_file_tokens = 2000  # per-file cap applied before the total
+read_global = false     # also read ~/.codex/AGENTS.md and ~/.claude/CLAUDE.md
+```
+
+Files load in this order: global (opt-in), project root `AGENTS.md` then `CLAUDE.md`, then each directory down to the target. A `CLAUDE.md` that only contains `@AGENTS.md` collapses into the file it imports. The bundle hash is recorded on every session and run.
+
+### `[billing]`
+
+Overrides the billing kind of an auth source. Automatic Observe investigations use call, token, and time limits for `subscription` sources and reserve dollars for `metered` ones.
+
+```toml
+[billing]
+claude-agent = "subscription"   # default
+codex-oauth = "subscription"    # default
+env-anthropic = "metered"       # default
+ollama = "unknown"
+```
+
 ## Project state
 
 Durable project state is split between human-readable `VOSS.md` and machine-managed `.voss/` directories:

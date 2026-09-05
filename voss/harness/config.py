@@ -54,6 +54,8 @@ _KV = re.compile(r'^\s*(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$', re.MULTILINE)
 # The pattern captures any non-whitespace token after `=`; get_allow_net
 # validates 'true' / 'false' and warns on anything else.
 _KV_BARE = re.compile(r"^\s*(\w+)\s*=\s*([^\s\"#]+)\s*$", re.MULTILINE)
+# `[billing]` keys are auth-source names such as `claude-agent`; allow hyphens.
+_KV_DASHED = re.compile(r'^\s*([\w-]+)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$', re.MULTILINE)
 
 
 def _parse_harness_section(text: str) -> dict[str, str]:
@@ -209,7 +211,8 @@ def get_provider_billing(source: str) -> str:
 
     `[billing]` in config.toml overrides the built-in table, keyed by source name.
     """
-    raw = _parse_bare_section(_BILLING_BLOCK, _read_config_text()).get(source)
+    m = _BILLING_BLOCK.search(_read_config_text())
+    raw = dict(_KV_DASHED.findall(m.group(0))).get(source) if m else None
     if raw is not None:
         n = raw.strip().lower()
         if n in BILLING_KINDS:

@@ -19,7 +19,7 @@
 | 3 | Observe envelope | **Unified with BOS3.** Observe events are a BOS category; findings are BOS4 decisions; dismiss/resolve are BOS5 labels. | No second envelope. `bos_events.py` gains a live emitter path. |
 | 4 | Editor | **CodeMirror 6.** | File and note nodes. No Monaco, no worker plumbing. |
 | 5 | `App.tsx` extraction | **Prerequisite, inside S1.** | S1 starts with the refactor; canvas host lands on the extracted host, never on the 1,965-line component. |
-| 6 | Provider billing | **Flat-rate flag.** `billing = subscription \| metered \| unknown` per provider. | Auto-investigation admits on call/token/time limits for subscription providers. |
+| 6 | Provider billing | **Flat-rate flag.** `[billing] <source> = subscription \| metered \| unknown` per auth source. | Auto-investigation admits on call/token/time limits for subscription providers. |
 | 7 | Instruction files | **AGENTS.md and CLAUDE.md are peers.** One canonical body, rendered per agent: CLAUDE.md for Claude panes, AGENTS.md for Codex/Cursor panes. | `voss sync` renders both from one source. Launch modal checks the file matching the CLI. Loader reads both and dedupes. |
 | 8 | Global instruction files | **Opt-in.** `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` read only when `harness.toml` enables it. | Default off. `voss instructions show` reports either way. |
 | 9 | Brief location | **`.planning/VOSS-OBSERVE-IMPLEMENTATION-BRIEF.md`** with a reconciliation header. | Brief is reference, this file is the plan. |
@@ -95,7 +95,7 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
   - `bundle_hash` = sha256 over ordered `(path, sha256)` pairs.
 - **S0.4 Prompt slice.** `voss/harness/agent.py` `_compose_system_blocks`: add `instructions_text` immediately after `voss_md_block`, before `cognition_text`. Template `voss/templates/agent/instructions_block.md.jinja`. Overflow event `instructions_overflow` on the renderer, mirroring `cognition_overflow`.
 - **S0.5 Session hash.** `voss/harness/session.py` / `recorder.py`: `instructions_hash: str` and `instructions_files: list[str]` on `RunRecord` and `SessionRecord`. `voss resume` prints a one-line warning when the current hash differs from the recorded one. Redaction test extended to the new fields.
-- **S0.6 Config.** `voss/harness/config.py`: `[instructions] enabled=true, budget_tokens=4000, per_file_tokens=2000, read_global=false`. `[providers.<name>] billing = "subscription"|"metered"|"unknown"`; defaults: `claude-agent`, `codex` → subscription; API-key providers → metered; else unknown.
+- **S0.6 Config.** `voss/harness/config.py`: `[instructions] enabled=true, budget_tokens=4000, per_file_tokens=2000, read_global=false`. `[billing] <auth-source> = "subscription"|"metered"|"unknown"` keyed by `Resolution.source` (parser handles flat tables, not dotted sections); defaults: `claude-agent`, `codex-oauth` → subscription; API-key sources (`env-*`, `voss-*`, `codex`) → metered; else unknown.
 - **S0.7 Observe mode.** `voss/harness/permissions.py`: `Mode = Literal["plan","edit","auto","observe"]`. `mode_allows("observe", ...)` denies every mutating tool and `shell_run`. `PermissionGate.check` returns `(False, "denied by mode observe")` before the prompt path, before `auto_yes`, before rule "allow". `voss do --mode=observe` accepted by the CLI.
 - **S0.8 CLI.** `voss instructions show [--cwd] [--target DIR]` prints files in load order with kind, tokens, hash, truncation, and resolved imports. `voss instructions check` exits 1 on cycle or budget overflow.
 
