@@ -33,6 +33,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'release'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
@@ -59,7 +60,7 @@ jobs:
         env:
           PYTEST_MARKERS: ${{ github.event_name == 'pull_request' && 'not live and not slow' || 'not live' }}
       - uses: codecov/codecov-action@v7
-        if: matrix.python-version == '3.12'
+        if: ${{ !cancelled() && matrix.python-version == '3.12' }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
