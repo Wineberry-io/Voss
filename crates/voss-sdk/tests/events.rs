@@ -47,11 +47,17 @@ fn agent_event_exhaustive_match_includes_control_variant() {
         AgentEvent::CognitionLoaded(_) => "cognition_loaded",
         AgentEvent::CognitionOverflow(_) => "cognition_overflow",
         AgentEvent::PrinciplesOverflow(_) => "principles_overflow",
+        AgentEvent::InstructionsOverflow(_) => "instructions_overflow",
         AgentEvent::WarningEvent(_) => "warning",
         AgentEvent::ProbableEvent(_) => "probable",
         AgentEvent::BudgetUpdated(_) => "budget.updated",
         AgentEvent::ConfidenceUpdated(_) => "confidence.updated",
         AgentEvent::GateUpdated(_) => "gate.updated",
+        AgentEvent::SwarmAssign(_) => "swarm.assign",
+        AgentEvent::SwarmWorkerDone(_) => "swarm.worker_done",
+        AgentEvent::SwarmGate(_) => "swarm.gate",
+        AgentEvent::SwarmNeedsOperator(_) => "swarm.needs_operator",
+        AgentEvent::SwarmComplete(_) => "swarm.complete",
     };
 
     assert_eq!(name, "server.connected");

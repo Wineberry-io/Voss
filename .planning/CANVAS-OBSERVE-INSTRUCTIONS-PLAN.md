@@ -82,6 +82,8 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 ## S0 — Harness foundations
 
+**Status:** executed 2026-09-05 on branch `s0-harness-foundations`. Extra: `contracts/*` and `crates/voss-sdk` event types regenerated (SDK was stale since V25 swarm events; projection/test match arms added).
+
 **Goal:** the three harness primitives every later sprint reads: instruction bundle, observe mode, provider billing flag. Plus the brief in the tree and three short ADRs. No UI, no model calls.
 
 ### Tasks
@@ -101,14 +103,14 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 ### Definition of done
 
-- [ ] `.planning/VOSS-OBSERVE-IMPLEMENTATION-BRIEF.md` present with reconciliation header
-- [ ] Three ADRs present
-- [ ] `instructions.py` + `tests/harness/test_instructions.py`
-- [ ] Prompt slice wired; `tests/harness/test_agent_prompt_blocks.py` (or existing prompt-block test) asserts slice order
-- [ ] `RunRecord`/`SessionRecord` fields + redaction test extended
-- [ ] Config keys documented in `docs/` config reference
-- [ ] `mode="observe"` + `tests/harness/test_permissions_observe.py`
-- [ ] `voss instructions` CLI + test
+- [x] `.planning/VOSS-OBSERVE-IMPLEMENTATION-BRIEF.md` present with reconciliation header
+- [x] Three ADRs present (`.planning/adr/0001..0003`)
+- [x] `instructions.py` + `tests/harness/test_instructions.py`
+- [x] Prompt slice wired; `tests/harness/test_instructions_injection.py` asserts slice order
+- [x] `RunRecord`/`SessionRecord` fields + redaction test extended (`test_session_redaction.py`, `test_principles_guard.py` sentinels)
+- [x] Config keys documented in `site/docs/reference/config-state.mdx`
+- [x] `mode="observe"` + `tests/harness/test_permissions_observe.py`
+- [x] `voss instructions` CLI + test (`test_instructions_cli.py`)
 - [ ] Full harness suite green (`.venv/bin/python -m pytest tests/harness`)
 
 ### Acceptance criteria
@@ -487,5 +489,11 @@ cd apps/voss-app && pnpm tsx scripts/test-canvas-perf.ts
 Append one line per accepted criterion: `AC-Sx-y — <test name or screenshot path> — <date>`.
 
 ```
-(empty)
+AC-S0-1 — tests/harness/test_instructions.py::test_ac_s0_1_nested_order_collapse_and_stable_hash — 2026-09-05
+AC-S0-2 — tests/harness/test_instructions.py::test_ac_s0_2_import_cycle_never_raises — 2026-09-05
+AC-S0-3 — tests/harness/test_instructions.py::test_ac_s0_3_budget_truncates_and_records + test_instructions_injection.py::test_ac_s0_3_overflow_event — 2026-09-05
+AC-S0-4 — tests/harness/test_instructions_injection.py::test_ac_s0_4_block_order — 2026-09-05
+AC-S0-5 — tests/harness/test_permissions_observe.py (TestGate: denied_without_prompt, project_allow_rule_does_not_override, auto_yes_does_not_widen, remembered_always_does_not_override) — 2026-09-05
+AC-S0-6 — tests/harness/test_observe_mode_run.py::test_ac_s0_6_observe_turn_reads_denies_writes_records_hash — 2026-09-05
+AC-S0-7 — tests/harness/test_instructions.py::test_ac_s0_7_global_files_opt_in — 2026-09-05
 ```
