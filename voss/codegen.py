@@ -33,7 +33,6 @@ from .ast_nodes import (
     Lambda,
     LetStmt,
     ListLit,
-    MatchCase,
     MatchStmt,
     Member,
     NullLit,
@@ -52,7 +51,6 @@ from .ast_nodes import (
     TeamDecl,
     TryCatch,
     TypeExpr,
-    TypeKwarg,
     TypeRef,
     UnaryOp,
     UseStmt,
@@ -60,7 +58,7 @@ from .ast_nodes import (
     WithinFallback,
     YieldStmt,
 )
-from .diagnostics import AnalysisResult, EmittedIndex
+from .diagnostics import AnalysisResult
 
 
 @dataclass(frozen=True, slots=True)

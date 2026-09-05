@@ -4,7 +4,6 @@ Tests for M10-03 ast-grep + regex fallback + service (CODE-03).
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 import pytest

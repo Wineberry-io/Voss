@@ -23,7 +23,7 @@ from voss.harness.tools import make_toolset
 # Use a hand-rolled async timeout shim that mimics the contract but with a
 # short ceiling so the test runs in ~0.5s instead of 30s.
 async def _short_timeout_shell_run(cwd: Path, cmd: str, timeout: float = 0.3) -> str:
-    from voss.harness.sandbox import shell_allowed, split_command, SandboxError
+    from voss.harness.sandbox import shell_allowed, split_command
 
     ok, reason = shell_allowed(cmd)
     if not ok:

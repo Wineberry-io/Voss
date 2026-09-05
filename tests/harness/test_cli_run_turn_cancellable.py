@@ -8,7 +8,6 @@ CancelledError as click.Abort.
 from __future__ import annotations
 
 import asyncio
-import signal
 
 import click
 import pytest

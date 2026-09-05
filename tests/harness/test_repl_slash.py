@@ -355,7 +355,6 @@ class TestT6Behaviors:
     def test_diff_happy_path(self, fake_ctx, capsys, monkeypatch):
         """SLASH-01: /diff happy-path via subprocess monkeypatch (git diff against working tree)."""
         from voss.harness.cli import _build_slash_registry
-        import subprocess
         from types import SimpleNamespace
 
         fake_diff = "diff --git a/foo b/foo\nindex 123..456 100644\n--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-old\n+new"
@@ -441,7 +440,6 @@ class TestT6Behaviors:
         """SLASH-05 / D-03: cross-cwd resume prints warning to err and does NOT change cwd."""
         from voss.harness.cli import _build_slash_registry
         from types import SimpleNamespace
-        from pathlib import Path
 
         other_cwd = "/tmp/other-project"
 

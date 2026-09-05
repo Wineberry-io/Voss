@@ -12,7 +12,6 @@ from unittest import mock
 
 import pytest
 
-import voss.harness.config as config_api
 import voss.harness.memory_store as memory_store_api
 from voss.harness.memory_store import Hit
 

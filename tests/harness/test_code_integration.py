@@ -14,7 +14,6 @@ from voss.harness.code.service import CodeIntelService
 async def test_full_code_intel_happy_path_on_fixtures(tmp_path):
     """Smoke the entire surface on the Python fixture."""
     # Copy one fixture into the temp project so we have a real cwd
-    import shutil
     from pathlib import Path
 
     fixture = Path("tests/fixtures/code/python/app.py")

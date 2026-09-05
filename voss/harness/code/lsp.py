@@ -8,10 +8,7 @@ into any public API or other modules.
 from __future__ import annotations
 
 import asyncio
-import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from .models import CodeLocation, ReferenceHit, SymbolHit

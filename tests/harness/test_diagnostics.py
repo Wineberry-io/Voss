@@ -5,10 +5,8 @@ and D-14 (exit code semantics including WARN-only stderr nuance).
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss.harness import auth as auth_mod

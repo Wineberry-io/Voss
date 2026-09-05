@@ -1,6 +1,5 @@
 from voss.ast_nodes import (
-    IfStmt, MatchStmt, MatchCase, SimilarPattern, WildcardPattern, ExprPattern,
-    ConfidenceGate, BinOp, Call, ReturnStmt, ExprStmt,
+    IfStmt, MatchStmt, SimilarPattern, WildcardPattern, ConfidenceGate, BinOp,
 )
 
 def test_if_simple(parse_source):

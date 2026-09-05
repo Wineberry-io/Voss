@@ -23,7 +23,6 @@ import asyncio
 import json
 from pathlib import Path
 
-import pytest
 
 from voss.harness import multiagent
 from voss.harness.session_tree import SessionTreeManager, SessionTreeNode

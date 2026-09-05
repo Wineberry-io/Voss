@@ -5,8 +5,7 @@ import dataclasses
 
 import pytest
 
-from voss.harness.board import Board, Card
-from voss.harness.session_tree import SessionTreeManager
+from voss.harness.board import Board
 
 from .conftest import build_test_team
 

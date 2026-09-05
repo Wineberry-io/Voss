@@ -21,8 +21,6 @@ from typing import Callable, Optional
 from voss.harness.permissions import PermissionGate
 from voss.harness.session_tree import (
     SessionTreeManager,
-    SessionTreeNode,
-    _write_node_file,
     finalize_node,
 )
 from voss.harness.subagents import (
@@ -42,7 +40,7 @@ from voss.harness.team import (
 from voss.harness.tools import make_toolset
 
 from .errors import EMCageViolation
-from .protocols import TERMINAL_COLUMNS, BoardProtocol, Column
+from .protocols import TERMINAL_COLUMNS, BoardProtocol
 from .tickets import (
     KillRecord,
     RescopeRecord,
@@ -330,7 +328,7 @@ class EMBoardHandle:
         if card is not None and getattr(card, "column", "") == "Done":
             raise EMCageViolation(
                 op="kill_card",
-                reason=f"cannot kill card in column 'Done'",
+                reason="cannot kill card in column 'Done'",
             )
 
         kr = KillRecord(
@@ -369,7 +367,7 @@ class EMBoardHandle:
         if card is not None and getattr(card, "column", "") == "Done":
             raise EMCageViolation(
                 op="rescope_card",
-                reason=f"cannot rescope card in column 'Done'",
+                reason="cannot rescope card in column 'Done'",
             )
 
         # Cage: new_scope must be contained in ceiling.scope.

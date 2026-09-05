@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import Optional
 
 import pytest
 from rich.console import Console

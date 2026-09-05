@@ -12,7 +12,6 @@ continues (audit-not-abort). BudgetExceededError forces all cards to Blocked.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from voss_runtime.exceptions import BudgetExceededError
 

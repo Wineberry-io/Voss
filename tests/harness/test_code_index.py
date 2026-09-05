@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from voss.harness.code.index import build_index, refresh, summarize
 from voss.harness.code.models import IndexSummary
@@ -18,7 +16,7 @@ def _make_fixture_tree(root: Path, lang: str) -> None:
     elif lang == "go":
         (root / "main.go").write_text("package main\nfunc sharedEntry(x int) int { return x + 1 }\n", encoding="utf-8")
     else:
-        (root / f"app.{lang}").write_text(f"function sharedEntry(x) {{ return x + 1; }}\n", encoding="utf-8")
+        (root / f"app.{lang}").write_text("function sharedEntry(x) { return x + 1; }\n", encoding="utf-8")
 
 
 def test_build_and_refresh_is_deterministic(tmp_path: Path) -> None:

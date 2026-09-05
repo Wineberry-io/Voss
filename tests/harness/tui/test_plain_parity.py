@@ -19,10 +19,8 @@ from types import SimpleNamespace
 import pytest
 from click.testing import CliRunner
 
-from voss.harness import auth as auth_mod
 from voss.harness.agent import Plan
 from voss.harness.cli import do_cmd
-from voss_runtime.providers.base import ProviderResponse
 
 from tests.harness.test_voss_loop_parity import FakeProvider
 

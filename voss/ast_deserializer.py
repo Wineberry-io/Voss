@@ -104,7 +104,7 @@ def _parse_span(raw: Any, path: str) -> Span:
         raise ValueError(_ctx(f"non-integer span coordinates: {lines!r} / {cols!r}: {e}", path)) from e
     fi = d["file"]
     if not isinstance(fi, str):
-        raise ValueError(_ctx(f"'file' must be str", path + ".file"))
+        raise ValueError(_ctx("'file' must be str", path + ".file"))
     syn_raw = d["synthetic"]
     if syn_raw is None:
         raise ValueError(_ctx("'synthetic' must be present (bool)", path + ".synthetic"))
@@ -146,7 +146,7 @@ def _node_repr(kind: str) -> str:
 
 def _deserialize_subnode(val: Any, path: str) -> Node:
     if not isinstance(val, dict):
-        raise ValueError(_ctx(f"expected node object (dict)", path))
+        raise ValueError(_ctx("expected node object (dict)", path))
     node = _deserialize_node(val, path)
     return node
 
@@ -407,7 +407,7 @@ def _b_dict(span: Span, data: dict[str, Any], *, base_path: str) -> Node:
     for i, pair in enumerate(lst):
         pv = _expect_list(pair, f"{base_path}.items[{i}]")
         if len(pv) != 2:
-            raise ValueError(_ctx(f"each dict entry must be [key,value]", base_path + f".items[{i}]"))
+            raise ValueError(_ctx("each dict entry must be [key,value]", base_path + f".items[{i}]"))
         k = _deserialize_subnode(pv[0], f"{base_path}.items[{i}][0]")
         vv = _deserialize_subnode(pv[1], f"{base_path}.items[{i}][1]")
         if not isinstance(k, Expr) or not isinstance(vv, Expr):
@@ -528,7 +528,7 @@ def _b_match_case(span: Span, data: dict[str, Any], *, base_path: str) -> Node:
     _require_keys(data, base_path, "pattern", "body")
     pat = _deserialize_subnode(data["pattern"], base_path + ".pattern")
     if not isinstance(pat, Pattern):
-        raise ValueError(_ctx(f"MatchCase.pattern must be Pattern", base_path + ".pattern"))
+        raise ValueError(_ctx("MatchCase.pattern must be Pattern", base_path + ".pattern"))
     return MatchCase(span=span, pattern=pat, body=_stmt_tuple(data["body"], base_path + ".body"))
 
 
@@ -557,7 +557,7 @@ def _b_ctx(span: Span, data: dict[str, Any], *, base_path: str) -> Node:
     _require_keys(data, base_path, "budget", "body")
     bd = _deserialize_subnode(data["budget"], base_path + ".budget")
     if not isinstance(bd, BudgetArg):
-        raise ValueError(_ctx(f"CtxBlock.budget must be BudgetArg", base_path + ".budget"))
+        raise ValueError(_ctx("CtxBlock.budget must be BudgetArg", base_path + ".budget"))
     return CtxBlock(span=span, budget=bd, body=_stmt_tuple(data["body"], base_path + ".body"))
 
 

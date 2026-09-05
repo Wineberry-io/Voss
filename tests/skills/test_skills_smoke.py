@@ -23,7 +23,6 @@ import types
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from voss.harness.skill_registry import default_skill_registry
 

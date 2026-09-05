@@ -1,15 +1,13 @@
 """O5-05: OEM-07 lineage — predecessor JSON on disk + bidirectional pointers."""
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
 
 from voss.harness.em.loop import em_loop
-from voss.harness.em.schema import CreateTicketOp, KillCardOp, RescopeCardOp, EMPlanResponse, NoopOp
+from voss.harness.em.schema import KillCardOp, RescopeCardOp, EMPlanResponse, NoopOp
 from voss.harness.em.stub import DeterministicEMStub
-from voss.harness.em.tickets import KillRecord, RescopeRecord
 
 
 class TestKillLineage:

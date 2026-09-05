@@ -27,7 +27,6 @@ from pydantic import BaseModel, ConfigDict
 
 from voss.template_render import render_package_template
 from voss.harness.prompt_override import default_runtime_vars, load_prompt
-from voss_runtime.exceptions import ParseError
 from voss_runtime.providers.base import ModelProvider, ProviderResponse
 
 from .verdict import ReviewerVerdict

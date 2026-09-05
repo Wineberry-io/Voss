@@ -14,7 +14,6 @@ swapped to `@vosslang/cli` because the `voss` npm org was taken.
 
 from __future__ import annotations
 
-import os
 import platform
 import shutil
 import subprocess

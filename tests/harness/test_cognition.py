@@ -16,7 +16,6 @@ from voss_runtime.providers.base import ProviderResponse
 
 from voss.harness.agent import Plan, ToolCall
 from voss.harness.cognition import (
-    ArchitectureFrontmatter,
     FRONTMATTER_RE,
     _render_steps_for_plan_md,
     append_gitignore_line_idempotent,

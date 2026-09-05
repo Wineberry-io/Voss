@@ -16,9 +16,9 @@ import (
 // pathsFromHere are relative to this test's working directory
 // (sdk/go/internal/drift).
 const (
-	sdkGoDir      = "../.."                            // sdk/go
+	sdkGoDir      = "../.."                              // sdk/go
 	contractsPath = "../../../../contracts/openapi.json" // repo-root contracts/
-	repoRootRel   = "../../../.."                       // repo root
+	repoRootRel   = "../../../.."                        // repo root
 )
 
 // TestTypesAreUpToDate regenerates types.gen.go via `go generate ./...` and

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from voss.harness.board import Board, Card
+from voss.harness.board import Board
 from voss.harness.board.machine import (
     _BoardConfig,
     _DEFAULT_RISK_THRESHOLDS,

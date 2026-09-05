@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast as _ast
 
-import pytest
 
 from voss.ast_nodes import (
     Arg,

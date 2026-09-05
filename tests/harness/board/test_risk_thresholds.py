@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from voss.harness.board.gates import GateContext, conf_meets_p
 from voss.harness.board.machine import Card, _DEFAULT_RISK_THRESHOLDS
 from voss.harness.board.stub import DeterministicReviewerStub
-from voss.harness.team import TeamCeiling, TeamRoleScope
+from voss.harness.team import TeamCeiling
 
 
 def _make_ctx(

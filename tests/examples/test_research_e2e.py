@@ -11,7 +11,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
 
 from tests.examples.helpers import (
     assert_no_repo_cache_artifacts,

@@ -5,7 +5,7 @@ import json
 import pytest
 from pathlib import Path
 
-from voss import parse, to_dict
+from voss import to_dict
 from voss.ast_deserializer import program_from_dict
 
 EXAMPLES_DIR = Path(__file__).parent / "examples"

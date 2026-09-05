@@ -4,7 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss.cli import main

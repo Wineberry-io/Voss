@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from voss.codegen import PythonWriter, generate_python
 

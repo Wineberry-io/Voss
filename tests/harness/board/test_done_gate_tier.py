@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from voss.harness.board import Board, BoardGateError
+from voss.harness.board import Board
 from voss.harness.board.stub import DeterministicReviewerStub
 from voss.harness.board.verdict import ReviewerVerdict
 

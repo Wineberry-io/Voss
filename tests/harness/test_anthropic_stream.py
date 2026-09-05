@@ -15,7 +15,6 @@ from voss.harness.providers import (
     Done,
     ParsedPlan,
     TextDelta,
-    ToolUseDelta,
     ToolUseEnd,
     ToolUseStart,
     Usage,

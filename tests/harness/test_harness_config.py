@@ -1,7 +1,6 @@
 """Round-trip tests for ~/.config/voss/config.toml (D-08, D-09)."""
 from __future__ import annotations
 
-from pathlib import Path
 
 import pytest
 

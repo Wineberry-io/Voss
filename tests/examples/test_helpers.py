@@ -1,7 +1,6 @@
 """Tests for tests/examples/helpers.py (Phase 6 harness)."""
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -15,7 +14,6 @@ from tests.examples.helpers import (
     deterministic_subprocess_env,
     example_source,
     run_cmd,
-    run_voss,
 )
 
 

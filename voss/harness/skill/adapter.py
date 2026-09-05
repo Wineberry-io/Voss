@@ -11,11 +11,14 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from voss.harness.skill.scope import ScopeSpec, scoped_gate
+
+if TYPE_CHECKING:
+    from voss.harness.skill_registry import SkillHandler
 
 
 def make_voss_skill_handler(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 
 from voss.ast_nodes import (
     Arg,
@@ -10,7 +9,6 @@ from voss.ast_nodes import (
     FnDecl,
     Identifier,
     IfStmt,
-    IntLit,
     LetStmt,
     Param,
     QualName,

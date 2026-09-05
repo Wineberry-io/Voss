@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from voss import analyze
 from voss.analyzer import Analyzer
@@ -10,7 +9,6 @@ from voss.ast_nodes import (
     MatchCase,
     MatchStmt,
     SimilarPattern,
-    StringLit,
     WildcardPattern,
 )
 

@@ -14,7 +14,7 @@ from voss_runtime import ToolDescriptor, tool
 
 from .net import NetSession
 from .sandbox import jail_path, shell_allowed, split_command, SandboxError
-from .tui.widgets.diff_modal import DiffDecision, Hunk
+from .tui.widgets.diff_modal import Hunk
 from .memory_store import MemoryStore
 
 

@@ -1,7 +1,6 @@
 """O5-03: em_plan call-shape — mocked provider, ParseError sentinel, L2-vocab scan."""
 from __future__ import annotations
 
-from typing import Optional
 
 import pytest
 

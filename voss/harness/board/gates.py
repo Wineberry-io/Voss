@@ -23,11 +23,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Protocol
 
-from voss.harness.team import TeamCeiling, TeamRoleScope
+from voss.harness.team import TeamCeiling
 from .verdict import Reviewer, ReviewerVerdict
 
 if TYPE_CHECKING:
-    from .machine import Card, Column, RiskTier
+    from .machine import Card
 
 
 # SPEC L114 — 7 stable predicate names. Tests pin this tuple.

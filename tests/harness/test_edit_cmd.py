@@ -1,9 +1,7 @@
 """`voss edit` CLI + scope-aware gate behaviors (D-01..D-04, CTRL-08)."""
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss.harness.cli import edit_cmd

@@ -21,7 +21,7 @@ import contextlib
 import io
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Awaitable, Callable
+from typing import Awaitable, Callable
 
 
 def make_skill_dispatch(

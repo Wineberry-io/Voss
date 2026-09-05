@@ -3,7 +3,6 @@ from pathlib import Path
 import pytest
 
 from voss.harness.sandbox import (
-    DEFAULT_SHELL_ALLOWLIST,
     SHELL_METACHARS,
     SandboxError,
     jail_path,

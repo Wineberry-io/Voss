@@ -6,7 +6,6 @@ from .budget import current_budget
 from .probable import ProbableValue
 from .providers import get as get_provider
 from .providers.base import ModelProvider
-from .exceptions import BudgetExceededError
 
 Compressor = Callable[[str, int, ModelProvider], Awaitable[str]]
 

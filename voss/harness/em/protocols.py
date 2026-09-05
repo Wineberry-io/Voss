@@ -7,8 +7,7 @@ structurally.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, Optional, Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 
 Column = Literal["Backlog", "Planned", "InProgress", "InReview", "Blocked", "Done"]

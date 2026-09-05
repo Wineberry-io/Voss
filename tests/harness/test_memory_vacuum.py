@@ -5,7 +5,6 @@ import json
 import stat
 from pathlib import Path
 
-import pytest
 
 from voss.harness.memory_store import MemoryStore
 

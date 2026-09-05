@@ -1,14 +1,13 @@
 """O3-02 Task 2: WIP-cap enforcement (OBRD-03 SPEC L113)."""
 from __future__ import annotations
 
-import dataclasses
 
 import pytest
 
 from voss.harness.board import Board, BoardWIPError
 from voss.harness.board.machine import _BoardConfig, _DEFAULT_WIP
 from voss.harness.session_tree import SessionTreeManager, SessionTreeNode
-from voss.harness.team import TeamCeiling, TeamRoleScope
+from voss.harness.team import TeamCeiling
 
 from .conftest import build_test_team, _NeverReviewer
 

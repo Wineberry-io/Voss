@@ -1,6 +1,6 @@
 from voss.ast_nodes import (
-    FnDecl, AgentDecl, AgentOptions, Param, TypeRef, ReturnStmt, LetStmt,
-    Call, Identifier, ListLit, SpawnExpr, StringLit, IntLit,
+    FnDecl, AgentDecl, TypeRef, ReturnStmt, LetStmt,
+    ListLit, SpawnExpr, StringLit,
 )
 
 def test_fn_simple(parse_source):

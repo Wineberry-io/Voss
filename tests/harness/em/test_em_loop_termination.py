@@ -5,14 +5,12 @@ import pytest
 
 from voss_runtime.exceptions import BudgetExceededError
 
-from voss.harness.em.errors import EMCageViolation
 from voss.harness.em.loop import em_loop
 from voss.harness.em.schema import (
     DispatchCardOp, EMPlanResponse, NoopOp,
 )
 from voss.harness.em.stub import DeterministicEMStub
 
-from .conftest import StubBoard
 
 
 class _BudgetBombStub:

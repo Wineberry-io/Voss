@@ -27,7 +27,6 @@ from voss.harness.agent import (
     Plan,
     ToolCall,
     _dispatch_read_batch,
-    _dispatch_singleton,
     _run_step_loop,
     _run_turn_exec,
 )

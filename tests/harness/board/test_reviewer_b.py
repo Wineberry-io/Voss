@@ -8,9 +8,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Optional
 
-import pytest
 
-from voss_runtime.providers.base import ModelProvider, ProviderResponse
+from voss_runtime.providers.base import ProviderResponse
 
 from voss.harness.board.reviewer_b import ReviewerB, REVIEWER_B_SYSTEM, _ReviewerBOutput
 from voss.harness.board.verdict import Reviewer, ReviewerVerdict
