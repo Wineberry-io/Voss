@@ -102,7 +102,7 @@ Make `account.tryvoss.dev` the browser identity surface.
 
 - Registration through verification and login passes end to end.
 - Reset links are expiring and single-use.
-- Deleted accounts cannot authenticate.
+- Deleted accounts cannot authenticate: deletion revokes every session, access token, and refresh token immediately, and `/api/v1/me` checks account status on every call. No grace period.
 - Errors do not reveal whether an email exists.
 - Marketing site remains a static export.
 
@@ -117,10 +117,10 @@ Expose secure native-app authorization and the minimum account API.
 - Laravel Passport public client.
 - Authorization Code with PKCE; no embedded client secret.
 - One-time `state` validation and an exact registered callback.
-- Initial `account:read` scope.
-- Short-lived access tokens and revocable refresh tokens.
+- Scopes: `account:read` for `/api/v1/me`; `account:revoke` for the revocation operations below. Revocation endpoints reject tokens that lack the scope; negative scope tests cover both.
+- Short-lived access tokens (≤ 15 minutes) and rotating refresh tokens: every refresh issues a new refresh token and invalidates the old one. Reuse of a consumed refresh token revokes the whole token family. Families have an absolute lifetime (30 days) regardless of refresh activity. The Rust client tests cover replay, expiry, and refresh.
 - `GET /api/v1/me`.
-- Current-token and all-device revocation operations.
+- Current-token and all-device revocation operations, both under `account:revoke`.
 - Authorized-session management page.
 - Versioned API error envelope.
 

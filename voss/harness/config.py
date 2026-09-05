@@ -128,11 +128,28 @@ def _parse_memory_section(text: str) -> dict[str, str]:
     return out
 
 
+_TRAILING_COMMENT = re.compile(r'(?<![\w"])\s*#.*$', re.MULTILINE)
+_QUOTED_LINE = re.compile(r'^\s*[\w-]+\s*=\s*"(?:[^"\\]|\\.)*"\s*(#.*)?$', re.MULTILINE)
+
+
+def _strip_comments(block: str) -> str:
+    """Drop `# ...` trailers so `key = 6000 # note` parses as `key = 6000`."""
+    out: list[str] = []
+    for line in block.splitlines():
+        m = _QUOTED_LINE.match(line)
+        if m and m.group(1):
+            line = line[: line.rfind("#")].rstrip()
+        elif '"' not in line:
+            line = _TRAILING_COMMENT.sub("", line)
+        out.append(line)
+    return "\n".join(out)
+
+
 def _parse_bare_section(block_re: re.Pattern[str], text: str) -> dict[str, str]:
     m = block_re.search(text)
     if not m:
         return {}
-    block = m.group(0)
+    block = _strip_comments(m.group(0))
     out: dict[str, str] = {}
     for k, v in _KV.findall(block):
         out[k] = v
@@ -146,8 +163,8 @@ def _read_config_text() -> str:
     if not p.exists():
         return ""
     try:
-        return p.read_text()
-    except OSError:
+        return p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
         return ""
 
 
@@ -212,7 +229,7 @@ def get_provider_billing(source: str) -> str:
     `[billing]` in config.toml overrides the built-in table, keyed by source name.
     """
     m = _BILLING_BLOCK.search(_read_config_text())
-    raw = dict(_KV_DASHED.findall(m.group(0))).get(source) if m else None
+    raw = dict(_KV_DASHED.findall(_strip_comments(m.group(0)))).get(source) if m else None
     if raw is not None:
         n = raw.strip().lower()
         if n in BILLING_KINDS:

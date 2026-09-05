@@ -18,7 +18,7 @@ Scope: Add proactive development-event investigation to the existing Voss applic
 
 ## 1. Product decision
 
-Build **Voss Observe** as a capability within Voss. A developer enables observation for a repository, continues working in Warp or Voss's terminal, and receives evidence-backed findings when a meaningful development event warrants investigation.
+Build **Voss Observe** as a capability within Voss. A developer enables observation for a repository, continues working in Voss's terminal (Warp support is backlog; *reconciled 2026-09-05*), and receives evidence-backed findings when a meaningful development event warrants investigation.
 
 The product should answer:
 
@@ -50,7 +50,7 @@ Treat existing paths below as integration anchors. Treat all proposed files, end
 | Capability | Baseline evidence | Implication |
 | --- | --- | --- |
 | Desktop | `apps/voss-app/package.json` uses Tauri, SolidJS, and TypeScript | Extend SolidJS; do not introduce React |
-| Orchestration console | `apps/voss-app/src/orchestration/OrchestrationConsole.tsx` connects Review, Orchestra, and Memory to a local sidecar | Reuse connection and run-inspection surfaces |
+| Orchestration console | *Historical anchor; the file does not exist on `dev`.* Live wiring is `apps/voss-app/src/App.tsx` + `src/org/live/*` + `src/portal/PortalShell.tsx` (*reconciled 2026-09-05*) | Reuse connection and run-inspection surfaces |
 | Local sidecar supervision | `crates/voss-app-core/src/sidecar.rs` owns a Python `voss serve` process | Preserve the Rust-to-Python boundary |
 | Runtime transport | `voss/harness/server/app.py` exposes sessions, messages, permissions, and swarm operations | Add Observe through this local service |
 | PTY telemetry | `crates/voss-app-core/src/pty/commands.rs` exposes data, exit, foreground process, title, budget, and context events | Extend where useful; a shell exit is not an individual command completion |
@@ -157,11 +157,11 @@ Use a capability-based adapter contract. Report support for command start, comma
 
 Initial discovery must compare:
 
-1. A structured shell integration running inside Warp.
-2. Explicit command wrapping for dependable output capture.
-3. Voss-owned PTY integration for commands launched in the existing desktop.
+1. ~~A structured shell integration running inside Warp.~~ *Backlog (reconciled 2026-09-05).*
+2. ~~Explicit command wrapping for dependable output capture.~~ *Not needed for the PTY path.*
+3. Voss-owned PTY integration for commands launched in the existing desktop. **Selected first adapter**: OSC 133/OSC 7 markers emitted by `voss shell-init`, parsed in `crates/voss-app-core/src/pty/reader.rs`.
 
-The initial supported path may be an explicit wrapper if passive integration cannot capture sufficient evidence reliably. Label partial support; do not imply complete Warp observation.
+~~The initial supported path may be an explicit wrapper if passive integration cannot capture sufficient evidence reliably. Label partial support; do not imply complete Warp observation.~~
 
 Requirements:
 
@@ -216,11 +216,11 @@ Initial defaults, adjustable after dogfooding:
 | Model-call budget | At most four calls across the investigator and any specialists |
 | Agent budget | One investigator and at most one specialist |
 | Output capture | At most 256 KiB per command, with explicit truncation |
-| Spending | Automatic analysis remains off until a user-visible finite budget is selected |
+| Spending | *Reconciled 2026-09-05:* for `metered` and `unknown` sources, automatic analysis remains off until a user-visible finite `budget_usd` is selected. For `subscription` sources (`claude-agent`, `codex-oauth`, or `[billing]` override) no dollar budget is required; admission uses the call, token, and time limits in this table. |
 
 Fingerprint failures using repository/worktree, command identity, normalized error signature, and relevant code state. Do not normalize away diagnostic distinctions. Preserve the original evidence separately.
 
-Unknown model pricing must not imply zero cost. Apply token, call, and time limits regardless; disable cost-dependent automatic admission when a required price estimate is unavailable. Reserve budget before concurrent work and reconcile actual usage afterward. Report approximate costs as estimates; a dollar estimate is not an absolute billing guarantee.
+Unknown model pricing must not imply zero cost. Apply token, call, and time limits regardless; disable cost-dependent automatic admission when a required price estimate is unavailable **and the source is not flagged `subscription`** (*reconciled 2026-09-05*). Reserve budget before concurrent work and reconcile actual usage afterward. Report approximate costs as estimates; a dollar estimate is not an absolute billing guarantee.
 
 Events from Voss verification are attached to the initiating run and suppressed from new automatic investigation unless an explicit bounded follow-up rule permits it. Unknown-origin events remain subject to cooldowns and loop limits.
 
@@ -562,7 +562,7 @@ Record local evaluation results by default. Cloud analytics remain opt-in under 
 ## 12. Definition of done for the first useful release
 
 - [ ] Existing Voss application and harness remain the implementation foundation.
-- [ ] One supported command-capture path works in Warp with documented limitations.
+- [ ] One supported command-capture path works in the Voss terminal with documented limitations (*reconciled 2026-09-05; Warp is backlog*).
 - [ ] Repository enrollment and provider disclosure are explicit.
 - [ ] Events include correct command, repository, output availability, and state references.
 - [ ] Admission is deterministic, bounded, and idempotent.
@@ -580,7 +580,7 @@ Start with Phase 0, then implement Phase 1 and Phase 2 as the first product mile
 
 The first vertical slice is:
 
-> A failed instrumented test command in Warp produces a structured local event, then a read-only Voss investigation, then an evidence-backed finding in the existing desktop.
+> A failed instrumented test command in a Voss terminal (*reconciled 2026-09-05*) produces a structured local event, then a read-only Voss investigation, then an evidence-backed finding in the existing desktop.
 
 Before each PR, verify current repository instructions and inspect the relevant existing implementation. Do not assume proposed route names or filenames already exist. Do not launch the write-oriented swarm path to simulate an Observe investigation. Preserve current CLI and desktop behavior while the new capability remains disabled.
 
@@ -589,7 +589,7 @@ Before each PR, verify current repository instructions and inspect the relevant 
 All links pin the reviewed baseline; they are evidence of inspected code, not a substitute for checking the implementation branch.
 
 - [Desktop dependencies](https://github.com/voss-lang/voss/blob/a6313d48b013fb8ec25f46bc721cbe7ef596984a/apps/voss-app/package.json)
-- [Orchestration console](https://github.com/voss-lang/voss/blob/a6313d48b013fb8ec25f46bc721cbe7ef596984a/apps/voss-app/src/orchestration/OrchestrationConsole.tsx)
+- ~~Orchestration console~~ *(historical; path does not exist on `dev`, see reconciliation header)*
 - [Rust sidecar supervisor](https://github.com/voss-lang/voss/blob/a6313d48b013fb8ec25f46bc721cbe7ef596984a/crates/voss-app-core/src/sidecar.rs)
 - [PTY events and commands](https://github.com/voss-lang/voss/blob/a6313d48b013fb8ec25f46bc721cbe7ef596984a/crates/voss-app-core/src/pty/commands.rs)
 - [Harness server](https://github.com/voss-lang/voss/blob/a6313d48b013fb8ec25f46bc721cbe7ef596984a/voss/harness/server/app.py)

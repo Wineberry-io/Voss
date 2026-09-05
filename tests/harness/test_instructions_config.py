@@ -57,3 +57,19 @@ def test_billing_bad_value_warns(xdg) -> None:
     _write(xdg, '[billing]\nclaude-agent = "free"\n')
     with pytest.warns(RuntimeWarning):
         assert hc.get_provider_billing("claude-agent") == "subscription"
+
+
+def test_trailing_comments_accepted(xdg) -> None:
+    _write(xdg, '[instructions]\nbudget_tokens = 6000 # total budget\nread_global = true # personal\n\n[billing]\nclaude-agent = "metered" # override\n')
+    cfg = hc.get_instructions_config()
+    assert cfg["budget_tokens"] == 6000
+    assert cfg["read_global"] is True
+    assert hc.get_provider_billing("claude-agent") == "metered"
+
+
+def test_invalid_utf8_config_falls_back_to_defaults(xdg) -> None:
+    p = hc.config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"[instructions]\nbudget_tokens = \xff\xfe\n")
+    assert hc.get_instructions_config()["budget_tokens"] == 4000
+    assert hc.get_provider_billing("claude-agent") == "subscription"

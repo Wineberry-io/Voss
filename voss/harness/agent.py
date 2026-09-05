@@ -161,7 +161,7 @@ def _compose_instructions_block(
     Budget enforcement happens in `instructions.load`; this only renders and
     surfaces truncation as `instructions_overflow` on the renderer.
     """
-    if bundle is None or not bundle.merged_text:
+    if bundle is None:
         return ""
     if bundle.truncated and renderer is not None:
         try:
@@ -172,6 +172,8 @@ def _compose_instructions_block(
             )
         except Exception:  # noqa: BLE001
             pass
+    if not bundle.merged_text:
+        return ""
     return render_package_template(
         "voss",
         "templates/agent/instructions_block.md.jinja",

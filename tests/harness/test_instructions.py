@@ -73,7 +73,10 @@ def test_ac_s0_3_budget_truncates_and_records(tmp_path: Path) -> None:
     assert b.truncated == ("AGENTS.md",)
     assert b.tokens <= 4000 + 50
     assert "(truncated: instruction budget)" in b.merged_text
-    assert b.bundle_hash == instr.load(tmp_path, config={"budget_tokens": 100_000, "per_file_tokens": 100_000}).bundle_hash
+    untruncated = instr.load(tmp_path, config={"budget_tokens": 100_000, "per_file_tokens": 100_000})
+    assert untruncated.truncated == ()
+    assert b.bundle_hash != untruncated.bundle_hash
+    assert b.bundle_hash == instr.load(tmp_path, config={"budget_tokens": 4000, "per_file_tokens": 4000}).bundle_hash
 
 
 def test_per_file_cap_applies_before_total(tmp_path: Path) -> None:
@@ -136,3 +139,67 @@ def test_unreadable_file_is_reported_not_raised(tmp_path: Path) -> None:
     b = instr.load(tmp_path)
     assert b.files == ()
     assert b.load_errors
+
+
+def test_nested_import_resolved_when_sibling_import_already_loaded(tmp_path: Path) -> None:
+    _w(tmp_path / "AGENTS.md", "shared\n")
+    _w(tmp_path / "docs" / "extra.md", "@more.md\nextra body\n")
+    _w(tmp_path / "docs" / "more.md", "nested body\n")
+    _w(tmp_path / "CLAUDE.md", "@AGENTS.md\n@docs/extra.md\nclaude prose\n")
+
+    b = instr.load(tmp_path)
+
+    assert b.paths == ["AGENTS.md", "CLAUDE.md"]
+    assert b.merged_text.count("shared") == 1
+    assert "extra body" in b.merged_text
+    assert "nested body" in b.merged_text
+    assert "@more.md" not in b.merged_text
+    assert b.load_errors == ()
+
+
+def test_imports_outside_root_are_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("SECRET\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    _w(repo / "AGENTS.md", "@../outside.md\n@/etc/hostname\n@~/.ssh/id_rsa\nsafe\n")
+
+    b = instr.load(repo)
+
+    assert "SECRET" not in b.merged_text
+    assert "safe" in b.merged_text
+    assert sum("outside instruction root" in e for e in b.load_errors) == 3
+
+
+def test_symlink_import_escaping_root_is_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("SECRET\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    _w(repo / "AGENTS.md", "@link.md\nsafe\n")
+    (repo / "link.md").symlink_to(outside)
+
+    b = instr.load(repo)
+
+    assert "SECRET" not in b.merged_text
+    assert any("outside instruction root" in e for e in b.load_errors)
+
+
+def test_global_file_imports_confined_to_its_own_dir(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    _w(home / ".claude" / "CLAUDE.md", "@rules.md\n@../.ssh/id_rsa\n")
+    _w(home / ".claude" / "rules.md", "global rules\n")
+    _w(home / ".ssh" / "id_rsa", "PRIVATE\n")
+    monkeypatch.setenv("HOME", str(home))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    b = instr.load(repo, config={"read_global": True})
+
+    assert "global rules" in b.merged_text
+    assert "PRIVATE" not in b.merged_text
+
+
+def test_budget_dropping_every_file_still_reports_truncation(tmp_path: Path) -> None:
+    _w(tmp_path / "AGENTS.md", "rule\n" * 500)
+    b = instr.load(tmp_path, config={"budget_tokens": 50, "per_file_tokens": 50})
+    assert b.merged_text == ""
+    assert b.truncated == ("AGENTS.md",)
