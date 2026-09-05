@@ -55,7 +55,16 @@ jobs:
             echo "::error::_substitute_placeholders re-introduced — forbidden by T1 ITER-02"
             exit 1
           fi
-      - run: pytest -q -m "not live" --cov=voss_runtime --cov-report=term-missing
+      - run: pytest -q -m "$PYTEST_MARKERS" --cov=voss_runtime --cov-report=term-missing --cov-report=xml
+        env:
+          PYTEST_MARKERS: ${{ github.event_name == 'pull_request' && 'not live and not slow' || 'not live' }}
+      - uses: codecov/codecov-action@v7
+        if: matrix.python-version == '3.12'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: python
+          fail_ci_if_error: false
 
   # WATCH-05: macOS + Linux are the gating runners for FSEvents/inotify event delivery.
   # Windows is explicitly non-gating per SPEC WATCH-05 and is intentionally excluded from this matrix.
