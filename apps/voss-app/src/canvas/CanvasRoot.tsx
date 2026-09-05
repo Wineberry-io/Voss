@@ -35,7 +35,7 @@ import {
   setView,
   type Direction,
 } from './store';
-import { markCanvasChange, markCanvasDragMove, markCanvasDragSettled } from './sync';
+import { markCanvasChange, markCanvasDragMove, markCanvasDragSettled, resetCanvasDrag } from './sync';
 
 export interface CloseUI {
   isFg: (paneId: string) => boolean;
@@ -259,6 +259,26 @@ export default function CanvasRoot(props: {
     snapshot: plain,
   };
 
+  /**
+   * One pointer gesture at a time. `end` runs on pointerup, pointercancel,
+   * or unmount, so listeners and the drag flag never outlive the gesture.
+   */
+  let endActiveGesture: (() => void) | null = null;
+  const beginGesture = (move: (ev: PointerEvent) => void, settle: () => void) => {
+    endActiveGesture?.();
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      endActiveGesture = null;
+      settle();
+    };
+    endActiveGesture = end;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
+
   // --- pointer: pan on empty plane ------------------------------------------
   const onRootPointerDown = (e: PointerEvent) => {
     const onBackground = e.target === rootEl || (e.target as HTMLElement).classList?.contains('canvas-plane');
@@ -268,20 +288,18 @@ export default function CanvasRoot(props: {
     e.preventDefault();
     const start = { x: e.clientX, y: e.clientY, vx: store.view.x, vy: store.view.y };
     setPanning(true);
-    const move = (ev: PointerEvent) => {
-      setStore(produce((s) => {
-        s.view.x = start.vx + (ev.clientX - start.x);
-        s.view.y = start.vy + (ev.clientY - start.y);
-      }));
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      setPanning(false);
-      commitView(store.view);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    beginGesture(
+      (ev) => {
+        setStore(produce((s) => {
+          s.view.x = start.vx + (ev.clientX - start.x);
+          s.view.y = start.vy + (ev.clientY - start.y);
+        }));
+      },
+      () => {
+        setPanning(false);
+        commitView(store.view);
+      },
+    );
   };
 
   const onWheel = (e: WheelEvent) => {
@@ -308,26 +326,24 @@ export default function CanvasRoot(props: {
     focus(id);
     const start = { x: e.clientX, y: e.clientY, nx: node.x, ny: node.y };
     setDraggingId(id);
-    const move = (ev: PointerEvent) => {
-      const z = store.view.zoom;
-      setStore(produce((s) => {
-        const n = findNode(s, id);
-        if (!n) return;
-        n.x = Math.round(start.nx + (ev.clientX - start.x) / z);
-        n.y = Math.round(start.ny + (ev.clientY - start.y) / z);
-      }));
-      markCanvasDragMove();
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      setDraggingId(null);
-      markCustom();
-      setStore(produce((s) => recomputeIndices(s.nodes)));
-      markCanvasDragSettled(plain());
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    beginGesture(
+      (ev) => {
+        const z = store.view.zoom;
+        setStore(produce((s) => {
+          const n = findNode(s, id);
+          if (!n) return;
+          n.x = Math.round(start.nx + (ev.clientX - start.x) / z);
+          n.y = Math.round(start.ny + (ev.clientY - start.y) / z);
+        }));
+        markCanvasDragMove();
+      },
+      () => {
+        setDraggingId(null);
+        markCustom();
+        setStore(produce((s) => recomputeIndices(s.nodes)));
+        markCanvasDragSettled(plain());
+      },
+    );
   };
 
   const beginNodeResize = (e: PointerEvent, id: string) => {
@@ -337,21 +353,19 @@ export default function CanvasRoot(props: {
     e.preventDefault();
     focus(id);
     const start = { x: e.clientX, y: e.clientY, w: node.w, h: node.h };
-    const move = (ev: PointerEvent) => {
-      const z = store.view.zoom;
-      setStore(produce((s) =>
-        resizeNode(s, id, start.w + (ev.clientX - start.x) / z, start.h + (ev.clientY - start.y) / z),
-      ));
-      markCanvasDragMove();
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      markCustom();
-      markCanvasDragSettled(plain());
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    beginGesture(
+      (ev) => {
+        const z = store.view.zoom;
+        setStore(produce((s) =>
+          resizeNode(s, id, start.w + (ev.clientX - start.x) / z, start.h + (ev.clientY - start.y) / z),
+        ));
+        markCanvasDragMove();
+      },
+      () => {
+        markCustom();
+        markCanvasDragSettled(plain());
+      },
+    );
   };
 
   onMount(() => {
@@ -366,6 +380,8 @@ export default function CanvasRoot(props: {
     changed();
   });
   onCleanup(() => {
+    endActiveGesture?.();
+    resetCanvasDrag();
     window.removeEventListener('resize', readViewport);
     rootEl?.removeEventListener('wheel', onWheel);
     resizeObserver?.disconnect();

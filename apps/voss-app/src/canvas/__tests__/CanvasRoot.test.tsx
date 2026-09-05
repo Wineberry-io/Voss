@@ -21,6 +21,7 @@ import { makePane, makeSplit, recomputeIndices as treeIndices } from '../../grid
 import type { SessionFileV1 } from '../../grid/sessionStorage';
 import CanvasRoot, { type CanvasController } from '../CanvasRoot';
 import { NODE_GAP } from '../model';
+import { isCanvasDragInFlight } from '../sync';
 
 let dispose: (() => void) | undefined;
 function mount(ui: () => unknown) {
@@ -182,5 +183,31 @@ describe('CanvasRoot', () => {
     expect(ctrl().snapshot().view.zoom).toBeLessThanOrEqual(1);
     ctrl().zoomToFocused();
     expect(ctrl().snapshot().view.zoom).toBe(1);
+  });
+
+  it('pointercancel settles a header drag and clears the in-flight flag', () => {
+    const { el, ctrl } = mountCanvas();
+    const id = nodeEls(el)[0].getAttribute('data-pane-id')!;
+    const header = nodeEls(el)[0].querySelector('.pane-header-bar') as HTMLElement;
+    header.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 210, clientY: 10 }));
+    expect(isCanvasDragInFlight()).toBe(true);
+    window.dispatchEvent(new MouseEvent('pointercancel', { clientX: 210, clientY: 10 }));
+    expect(isCanvasDragInFlight()).toBe(false);
+    expect(ctrl().snapshot().nodes.find((n) => n.id === id)!.x).toBe(200);
+    expect(nodeEls(el)[0].hasAttribute('data-dragging')).toBe(false);
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 900, clientY: 10 }));
+    expect(ctrl().snapshot().nodes.find((n) => n.id === id)!.x).toBe(200);
+  });
+
+  it('unmounting mid-drag clears the in-flight flag', () => {
+    const { el } = mountCanvas();
+    const header = nodeEls(el)[0].querySelector('.pane-header-bar') as HTMLElement;
+    header.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 10 }));
+    expect(isCanvasDragInFlight()).toBe(true);
+    dispose?.();
+    dispose = undefined;
+    expect(isCanvasDragInFlight()).toBe(false);
   });
 });

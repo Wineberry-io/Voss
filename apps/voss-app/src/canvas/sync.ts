@@ -32,3 +32,8 @@ export function markCanvasDragSettled(state: CanvasState): void {
 export function isCanvasDragInFlight(): boolean {
   return dragInFlight;
 }
+
+/** Drag abandoned (pointer cancelled, host unmounted): nothing to mirror. */
+export function resetCanvasDrag(): void {
+  dragInFlight = false;
+}
