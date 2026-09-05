@@ -76,3 +76,11 @@ def test_server_event_model_round_trips() -> None:
     parsed = AgentEventAdapter.validate_json(ev.model_dump_json())
     assert parsed.type == "instructions_overflow"
     assert parsed.budget == 4000
+
+
+def test_overflow_emitted_even_when_nothing_fits(tmp_path: Path) -> None:
+    (tmp_path / "AGENTS.md").write_text("rule\n" * 500, encoding="utf-8")
+    r = _StubRenderer()
+    bundle = instr.load(tmp_path, config={"budget_tokens": 50, "per_file_tokens": 50})
+    assert _compose_instructions_block(bundle, budget=50, renderer=r) == ""
+    assert r.overflow == [{"tokens": 0, "budget": 50, "truncated": ["AGENTS.md"]}]

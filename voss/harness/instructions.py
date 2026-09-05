@@ -1,5 +1,13 @@
 """Agent instruction files (AGENTS.md / CLAUDE.md) as one hashed bundle.
 
+`bundle_hash` identifies the *effective* bundle: file identities plus the
+budget settings and truncation outcome, so two runs with the same files but a
+different injected prompt get different hashes.
+
+Imports (`@path`) are confined to the instruction root: the project root for
+repository files, the file's own directory for opt-in global files. Absolute,
+home-relative, and traversal paths are rejected.
+
 Pure module in the `cognition.load()` mould: never raises out of `load()`,
 failures land in `InstructionBundle.load_errors`.
 
@@ -107,16 +115,39 @@ def _read(path: Path, errors: list[str]) -> Optional[str]:
         return None
 
 
+def _import_target(raw: str, base_dir: Path, root: Path, errors: list[str]) -> Optional[Path]:
+    """Resolve an `@path` import, refusing anything outside `root`."""
+    if raw.startswith("~") or Path(raw).is_absolute():
+        errors.append(f"import outside instruction root: {raw}")
+        return None
+    try:
+        target = (base_dir / raw).resolve()
+        root_resolved = root.resolve()
+    except OSError:
+        errors.append(f"import unresolvable: {raw}")
+        return None
+    if target != root_resolved and root_resolved not in target.parents:
+        errors.append(f"import outside instruction root: {raw}")
+        return None
+    return target
+
+
 def _resolve_imports(
     text: str,
     base_dir: Path,
     *,
+    root: Path,
     seen: set[Path],
     depth: int,
     errors: list[str],
     imports_out: list[str],
+    skip: frozenset[Path] = frozenset(),
 ) -> tuple[str, list[Path]]:
-    """Inline `@path` import lines. Returns (text, imported_paths)."""
+    """Inline `@path` import lines. Returns (text, imported_paths).
+
+    Paths in `skip` are dropped without inlining: an earlier bundle file
+    already carries their body.
+    """
     out_lines: list[str] = []
     imported: list[Path] = []
     for line in text.splitlines():
@@ -125,12 +156,12 @@ def _resolve_imports(
             out_lines.append(line)
             continue
         raw = m.group(1)
-        target = (Path(os.path.expanduser(raw)) if raw.startswith("~") else base_dir / raw)
-        try:
-            target = target.resolve()
-        except OSError:
-            target = target.absolute()
         imports_out.append(raw)
+        target = _import_target(raw, base_dir, root, errors)
+        if target is None:
+            continue
+        if target in skip:
+            continue
         if target in seen:
             errors.append(f"import cycle: {target}")
             continue
@@ -146,10 +177,12 @@ def _resolve_imports(
         nested, nested_paths = _resolve_imports(
             body,
             target.parent,
+            root=root,
             seen=seen | {target},
             depth=depth + 1,
             errors=errors,
             imports_out=imports_out,
+            skip=skip,
         )
         imported.extend(nested_paths)
         out_lines.append(nested)
@@ -195,45 +228,54 @@ def load(
     if target is not None and not target.is_absolute():
         target = root / target
 
-    candidates: list[tuple[Path, InstructionKind, str]] = []
+    candidates: list[tuple[Path, InstructionKind, str, Path]] = []
     if cfg.get("read_global"):
         for raw, kind in GLOBAL_CANDIDATES:
             p = Path(os.path.expanduser(raw))
             if p.is_file():
-                candidates.append((p, "global", raw))
+                candidates.append((p, "global", raw, p.parent))
     for d in _candidate_dirs(root, target, errors):
         for name, kind in ((AGENTS_FILENAME, "agents"), (CLAUDE_FILENAME, "claude")):
             p = d / name
             if p.is_file():
-                candidates.append((p, kind, _display_path(p, root)))  # type: ignore[arg-type]
+                candidates.append((p, kind, _display_path(p, root), root))  # type: ignore[arg-type]
 
     files: list[InstructionFile] = []
     collapsed: list[str] = []
     seen_hashes: set[str] = set()
     seen_paths: set[Path] = set()
 
-    for path, kind, display in candidates:
+    for path, kind, display, import_root in candidates:
         raw = _read(path, errors)
         if raw is None:
             continue
         resolved = path.resolve()
         imports: list[str] = []
+        probe_errors: list[str] = []
+        _, imported = _resolve_imports(
+            raw,
+            path.parent,
+            root=import_root,
+            seen={resolved},
+            depth=0,
+            errors=probe_errors,
+            imports_out=imports,
+        )
+        already = frozenset(p for p in imported if p in seen_paths)
+        if _only_imports(raw) and (not imported or already == frozenset(imported)):
+            errors.extend(probe_errors)
+            collapsed.append(display)
+            continue
         text, imported = _resolve_imports(
             raw,
             path.parent,
+            root=import_root,
             seen={resolved},
             depth=0,
             errors=errors,
-            imports_out=imports,
+            imports_out=[],
+            skip=already,
         )
-        if _only_imports(raw):
-            if not imported or all(p in seen_paths for p in imported):
-                collapsed.append(display)
-                continue
-        elif any(p in seen_paths for p in imported):
-            text = _inline_imports_skipping(
-                raw, path.parent, {p for p in imported if p in seen_paths}, errors
-            )
         digest = _sha256(text)
         if digest in seen_hashes:
             collapsed.append(display)
@@ -255,8 +297,6 @@ def load(
             )
         )
 
-    bundle_hash = _sha256("".join(f"{f.path}:{f.sha256}\n" for f in files))
-
     budget = int(cfg.get("budget_tokens", DEFAULT_CONFIG["budget_tokens"]))
     per_file = int(cfg.get("per_file_tokens", DEFAULT_CONFIG["per_file_tokens"]))
     truncated: list[str] = []
@@ -273,11 +313,13 @@ def load(
             text = _cut_to_tokens(text, limit, count) + "\n\n(truncated: instruction budget)"
             tokens = count(text)
             truncated.append(f.path)
-        remaining -= tokens
+        remaining = max(remaining - tokens, 0)
         sections.append(f"### {f.path}\n\n{text.rstrip()}\n")
-        if remaining <= 0:
-            remaining = 0
     merged = "\n".join(sections).rstrip() + ("\n" if sections else "")
+
+    identity = "".join(f"{f.path}:{f.sha256}\n" for f in files)
+    identity += f"budget={budget};per_file={per_file};truncated={','.join(truncated)}\n"
+    bundle_hash = _sha256(identity)
 
     return InstructionBundle(
         files=tuple(files),
@@ -288,30 +330,6 @@ def load(
         collapsed=tuple(collapsed),
         load_errors=tuple(errors),
     )
-
-
-def _inline_imports_skipping(
-    text: str, base_dir: Path, skip: set[Path], errors: list[str]
-) -> str:
-    """Inline imports except those whose bodies an earlier bundle file already carries."""
-    out: list[str] = []
-    for line in text.splitlines():
-        m = _IMPORT_LINE.match(line)
-        if not m:
-            out.append(line)
-            continue
-        raw = m.group(1)
-        target = (Path(os.path.expanduser(raw)) if raw.startswith("~") else base_dir / raw)
-        try:
-            target = target.resolve()
-        except OSError:
-            target = target.absolute()
-        if target in skip:
-            continue
-        body = _read(target, errors) if target.is_file() else None
-        if body is not None:
-            out.append(body)
-    return "\n".join(out)
 
 
 def _cut_to_tokens(text: str, limit: int, count: Callable[[str], int]) -> str:
