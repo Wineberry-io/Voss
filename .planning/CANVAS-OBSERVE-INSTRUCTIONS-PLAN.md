@@ -111,7 +111,7 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 - [x] Config keys documented in `site/docs/reference/config-state.mdx`
 - [x] `mode="observe"` + `tests/harness/test_permissions_observe.py`
 - [x] `voss instructions` CLI + test (`test_instructions_cli.py`)
-- [ ] Full harness suite green (`.venv/bin/python -m pytest tests/harness`)
+- [x] Full harness suite green except `tests/harness/tui/test_plain_parity.py` (3 cases), which fail identically on the base commit `c8e29450` (pre-existing stdout-baseline drift, unrelated to S0). `tests/harness/tui/baseline/runtime_surface.sha256` rebaselined for the two `recorder.py` fields (S0.5).
 
 ### Acceptance criteria
 
