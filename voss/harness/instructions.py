@@ -1,8 +1,10 @@
 """Agent instruction files (AGENTS.md / CLAUDE.md) as one hashed bundle.
 
-`bundle_hash` identifies the *effective* bundle: file identities plus the
-budget settings and truncation outcome, so two runs with the same files but a
-different injected prompt get different hashes.
+`bundle_hash` identifies the *effective* bundle: file identities, the budget
+settings, the truncation outcome, and a digest of the rendered text, so two
+runs with the same files but a different injected prompt get different hashes.
+`tokens` counts the merged text; the `## Instructions` frame is reserved out
+of `budget_tokens` so the rendered block never exceeds the budget.
 
 Imports (`@path`) are confined to the instruction root: the project root for
 repository files, the file's own directory for opt-in global files. Absolute,
@@ -38,6 +40,8 @@ GLOBAL_CANDIDATES: tuple[tuple[str, str], ...] = (
 MAX_FILE_BYTES = 1_048_576
 MAX_IMPORT_DEPTH = 3
 MIN_TAIL_TOKENS = 200
+BLOCK_FRAME = "## Instructions\n\n"
+TRUNCATION_MARKER = "\n\n(truncated: instruction budget)\n"
 
 DEFAULT_CONFIG: dict = {
     "enabled": True,
@@ -142,12 +146,17 @@ def _resolve_imports(
     errors: list[str],
     imports_out: list[str],
     skip: frozenset[Path] = frozenset(),
+    inlined: Optional[set[Path]] = None,
 ) -> tuple[str, list[Path]]:
     """Inline `@path` import lines. Returns (text, imported_paths).
 
     Paths in `skip` are dropped without inlining: an earlier bundle file
-    already carries their body.
+    already carries their body. `inlined` tracks bodies already expanded in
+    this file so a repeated import is carried once; `seen` is only the cycle
+    ancestry.
     """
+    if inlined is None:
+        inlined = set()
     out_lines: list[str] = []
     imported: list[Path] = []
     for line in text.splitlines():
@@ -160,7 +169,7 @@ def _resolve_imports(
         target = _import_target(raw, base_dir, root, errors)
         if target is None:
             continue
-        if target in skip:
+        if target in skip or target in inlined:
             continue
         if target in seen:
             errors.append(f"import cycle: {target}")
@@ -174,6 +183,7 @@ def _resolve_imports(
                 errors.append(f"import not found: {target}")
             continue
         imported.append(target)
+        inlined.add(target)
         nested, nested_paths = _resolve_imports(
             body,
             target.parent,
@@ -183,6 +193,7 @@ def _resolve_imports(
             errors=errors,
             imports_out=imports_out,
             skip=skip,
+            inlined=inlined,
         )
         imported.extend(nested_paths)
         out_lines.append(nested)
@@ -246,10 +257,13 @@ def load(
     seen_paths: set[Path] = set()
 
     for path, kind, display, import_root in candidates:
+        resolved = path.resolve()
+        if resolved in seen_paths:
+            collapsed.append(display)
+            continue
         raw = _read(path, errors)
         if raw is None:
             continue
-        resolved = path.resolve()
         imports: list[str] = []
         probe_errors: list[str] = []
         _, imported = _resolve_imports(
@@ -301,24 +315,29 @@ def load(
     per_file = int(cfg.get("per_file_tokens", DEFAULT_CONFIG["per_file_tokens"]))
     truncated: list[str] = []
     sections: list[str] = []
-    remaining = budget
+    remaining = budget - count(BLOCK_FRAME)
     for f in files:
-        text = f.text
-        tokens = f.tokens
+        header = f"### {f.path}\n\n"
+        section = header + f.text.rstrip() + "\n"
         limit = min(per_file, remaining)
-        if tokens > limit:
-            if limit < MIN_TAIL_TOKENS:
+        if count(section) > limit:
+            body_limit = limit - count(header) - count(TRUNCATION_MARKER)
+            if body_limit < MIN_TAIL_TOKENS:
                 truncated.append(f.path)
                 continue
-            text = _cut_to_tokens(text, limit, count) + "\n\n(truncated: instruction budget)"
-            tokens = count(text)
+            body = _cut_to_tokens(f.text, body_limit, count)
+            section = header + body + TRUNCATION_MARKER
+            while body and count(section) > limit:
+                body = body[:-8].rstrip()
+                section = header + body + TRUNCATION_MARKER
             truncated.append(f.path)
-        remaining = max(remaining - tokens, 0)
-        sections.append(f"### {f.path}\n\n{text.rstrip()}\n")
+        remaining = max(remaining - count(section) - 1, 0)
+        sections.append(section)
     merged = "\n".join(sections).rstrip() + ("\n" if sections else "")
 
     identity = "".join(f"{f.path}:{f.sha256}\n" for f in files)
     identity += f"budget={budget};per_file={per_file};truncated={','.join(truncated)}\n"
+    identity += f"merged={_sha256(merged)}\n"
     bundle_hash = _sha256(identity)
 
     return InstructionBundle(

@@ -214,6 +214,7 @@ Initial defaults, adjustable after dogfooding:
 | Repeat-failure cooldown | Sixty seconds for equivalent evidence on unchanged code |
 | Automatic investigation timeout | Ninety seconds |
 | Model-call budget | At most four calls across the investigator and any specialists |
+| Token budget | At most 60,000 prompt + completion tokens per investigation, investigator and specialist summed, reserved on the session `token_budget` (*reconciled 2026-09-05*; this is the "token" limit subscription sources admit on) |
 | Agent budget | One investigator and at most one specialist |
 | Output capture | At most 256 KiB per command, with explicit truncation |
 | Spending | *Reconciled 2026-09-05:* for `metered` and `unknown` sources, automatic analysis remains off until a user-visible finite `budget_usd` is selected. For `subscription` sources (`claude-agent`, `codex-oauth`, or `[billing]` override) no dollar budget is required; admission uses the call, token, and time limits in this table. |
