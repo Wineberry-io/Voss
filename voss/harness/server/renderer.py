@@ -194,6 +194,17 @@ class EventBusRenderer:
             )
         )
 
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        self._emit(
+            E.InstructionsOverflow(
+                instructions_tokens=instructions_tokens,
+                budget=budget,
+                truncated=list(truncated or []),
+            )
+        )
+
     def show_warning(self, msg: str) -> None:
         self._emit(E.WarningEvent(message=msg))
 

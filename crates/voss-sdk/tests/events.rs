@@ -47,6 +47,7 @@ fn agent_event_exhaustive_match_includes_control_variant() {
         AgentEvent::CognitionLoaded(_) => "cognition_loaded",
         AgentEvent::CognitionOverflow(_) => "cognition_overflow",
         AgentEvent::PrinciplesOverflow(_) => "principles_overflow",
+        AgentEvent::InstructionsOverflow(_) => "instructions_overflow",
         AgentEvent::WarningEvent(_) => "warning",
         AgentEvent::ProbableEvent(_) => "probable",
         AgentEvent::BudgetUpdated(_) => "budget.updated",

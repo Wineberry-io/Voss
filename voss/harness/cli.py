@@ -1878,8 +1878,8 @@ def _build_slash_registry() -> SlashRegistry:
             click.echo(f"  mode: {ctx.gate.mode}")
             return
         new_mode = args[0].strip()
-        if new_mode not in ("plan", "edit", "auto"):
-            click.echo("mode must be plan|edit|auto", err=True)
+        if new_mode not in ("plan", "edit", "auto", "observe"):
+            click.echo("mode must be plan|edit|auto|observe", err=True)
             return
         if new_mode == "auto" and "--confirm" not in args:
             click.echo(
@@ -2120,7 +2120,7 @@ def _wire_tui_permissions_if_textual(gate: PermissionGate, renderer) -> None:
 )
 @click.option(
     "--mode",
-    type=click.Choice(["plan", "edit", "auto"]),
+    type=click.Choice(["plan", "edit", "auto", "observe"]),
     default="plan",  # D-07: do defaults to plan
     help="Permission tier.",
 )
@@ -3728,6 +3728,7 @@ def resume_cmd(
     cwd = Path(record.cwd)
     if record.model:
         configure(default_model=record.model)
+    _warn_instructions_drift(record, cwd)
     res, provider = _resolve_auth_or_die(auth_pref, announce=False)
     prior = record.runs[-1] if record.runs else None
     _run_repl(
@@ -5255,6 +5256,96 @@ def recall_cmd(query: tuple[str, ...], json_out: bool, top_k: int, do_refresh: b
             click.echo(f"  {fields['excerpt']}")
 
 
+def _warn_instructions_drift(record, cwd: Path) -> None:
+    """One-line warning when AGENTS.md/CLAUDE.md changed since the session started."""
+    from . import instructions as instructions_mod
+    from .config import get_instructions_config
+
+    recorded = getattr(record, "instructions_hash", "") or ""
+    if not recorded:
+        return
+    current = instructions_mod.load(cwd, config=get_instructions_config()).bundle_hash
+    if current != recorded:
+        click.echo(
+            "  [instructions changed since this session started "
+            f"({recorded[:12]} → {current[:12]}); the next turn loads the new files]",
+            err=True,
+        )
+
+
+@click.group("instructions")
+def instructions_group() -> None:
+    """Inspect the AGENTS.md / CLAUDE.md bundle the harness injects."""
+
+
+def _instructions_bundle_for(cwd_str: str, target: str | None):
+    from . import instructions as instructions_mod
+    from .config import get_instructions_config
+
+    cwd = Path(cwd_str).resolve()
+    return instructions_mod.load(cwd, target, config=get_instructions_config())
+
+
+def _bundle_payload(bundle) -> dict:
+    return {
+        "bundle_hash": bundle.bundle_hash,
+        "tokens": bundle.tokens,
+        "files": [
+            {
+                "path": f.path,
+                "kind": f.kind,
+                "scope_dir": f.scope_dir,
+                "sha256": f.sha256,
+                "bytes": f.bytes,
+                "tokens": f.tokens,
+                "imports": list(f.imports),
+                "truncated": f.path in bundle.truncated,
+            }
+            for f in bundle.files
+        ],
+        "collapsed": list(bundle.collapsed),
+        "truncated": list(bundle.truncated),
+        "load_errors": list(bundle.load_errors),
+    }
+
+
+@instructions_group.command("show")
+@click.option("--cwd", "cwd_str", default=".", type=click.Path(file_okay=False), help="Project root.")
+@click.option("--target", default=None, help="Directory (relative to root) to scope nested files.")
+@click.option("--json", "json_mode", is_flag=True, help="Machine-readable output.")
+def instructions_show_cmd(cwd_str: str, target: str | None, json_mode: bool) -> None:
+    """Show instruction files in load order with kind, tokens, and hash."""
+    bundle = _instructions_bundle_for(cwd_str, target)
+    if json_mode:
+        click.echo(json.dumps(_bundle_payload(bundle), indent=2))
+        return
+    if not bundle.files:
+        click.echo("(no instruction files found)")
+    for f in bundle.files:
+        flag = " [truncated]" if f.path in bundle.truncated else ""
+        imports = f" imports={','.join(f.imports)}" if f.imports else ""
+        click.echo(f"  {f.path}  [{f.kind}]  {f.tokens} tokens  {f.sha256[:12]}{imports}{flag}")
+    for c in bundle.collapsed:
+        click.echo(f"  {c}  [collapsed]")
+    for e in bundle.load_errors:
+        click.echo(f"  ! {e}")
+    click.echo(f"  bundle: {bundle.bundle_hash[:16]}  {bundle.tokens} tokens")
+
+
+@instructions_group.command("check")
+@click.option("--cwd", "cwd_str", default=".", type=click.Path(file_okay=False), help="Project root.")
+@click.option("--target", default=None, help="Directory (relative to root) to scope nested files.")
+def instructions_check_cmd(cwd_str: str, target: str | None) -> None:
+    """Exit 1 on import cycles, unreadable files, or budget overflow."""
+    bundle = _instructions_bundle_for(cwd_str, target)
+    problems = list(bundle.load_errors) + [f"budget overflow: {p}" for p in bundle.truncated]
+    for p in problems:
+        click.echo(f"  ! {p}", err=True)
+    if problems:
+        sys.exit(1)
+    click.echo(f"  ok: {len(bundle.files)} file(s), {bundle.tokens} tokens, {bundle.bundle_hash[:16]}")
+
+
 AGENT_COMMANDS = (
     do_cmd,
     serve_cmd,
@@ -5287,6 +5378,7 @@ AGENT_COMMANDS = (
     hooks_group,
     capabilities_group,
     principles_group,
+    instructions_group,
     session_group,
     team_group,
     board_cmd,

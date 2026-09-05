@@ -496,6 +496,18 @@ class TextualRenderer:
             return
         self._post(tv.append_turn, "warning", body)
 
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        body = (
+            f"{glyphs.WARN} instruction files truncated to {budget} tokens "
+            f"({', '.join(truncated or [])})"
+        )
+        tv = self._turn_view()
+        if tv is None:
+            return
+        self._post(tv.append_turn, "warning", body)
+
     def show_warning(self, msg: str) -> None:
         tv = self._turn_view()
         if tv is None:
