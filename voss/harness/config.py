@@ -34,6 +34,8 @@ _TOOLS_BLOCK = re.compile(r"^\[tools\][^\[]*", re.MULTILINE)
 # model_tiers exist).
 _CONTEXT_BLOCK = re.compile(r"^\[context\][^\[]*", re.MULTILINE)
 _MEMORY_BLOCK = re.compile(r"^\[memory\][^\[]*", re.MULTILINE)
+_INSTRUCTIONS_BLOCK = re.compile(r"^\[instructions\][^\[]*", re.MULTILINE)
+_BILLING_BLOCK = re.compile(r"^\[billing\][^\[]*", re.MULTILINE)
 # T3-04: PITFALL 6 — escape the dot. Un-escaped `r"^\[net.rate_limits\]"`
 # also matches `[netXrate_limits]` (any single char), corrupting the
 # bucket config. The escape is load-bearing.
@@ -52,6 +54,8 @@ _KV = re.compile(r'^\s*(\w+)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$', re.MULTILINE)
 # The pattern captures any non-whitespace token after `=`; get_allow_net
 # validates 'true' / 'false' and warns on anything else.
 _KV_BARE = re.compile(r"^\s*(\w+)\s*=\s*([^\s\"#]+)\s*$", re.MULTILINE)
+# `[billing]` keys are auth-source names such as `claude-agent`; allow hyphens.
+_KV_DASHED = re.compile(r'^\s*([\w-]+)\s*=\s*"((?:[^"\\]|\\.)*)"\s*$', re.MULTILINE)
 
 
 def _parse_harness_section(text: str) -> dict[str, str]:
@@ -122,6 +126,103 @@ def _parse_memory_section(text: str) -> dict[str, str]:
     for k, v in _KV_BARE.findall(block):
         out.setdefault(k, v)
     return out
+
+
+def _parse_bare_section(block_re: re.Pattern[str], text: str) -> dict[str, str]:
+    m = block_re.search(text)
+    if not m:
+        return {}
+    block = m.group(0)
+    out: dict[str, str] = {}
+    for k, v in _KV.findall(block):
+        out[k] = v
+    for k, v in _KV_BARE.findall(block):
+        out.setdefault(k, v)
+    return out
+
+
+def _read_config_text() -> str:
+    p = config_path()
+    if not p.exists():
+        return ""
+    try:
+        return p.read_text()
+    except OSError:
+        return ""
+
+
+INSTRUCTIONS_DEFAULTS: dict = {
+    "enabled": True,
+    "budget_tokens": 4000,
+    "per_file_tokens": 2000,
+    "read_global": False,
+}
+
+
+def get_instructions_config() -> dict:
+    """Resolve `[instructions]` (AGENTS.md / CLAUDE.md loading) with defaults."""
+    raw = _parse_bare_section(_INSTRUCTIONS_BLOCK, _read_config_text())
+    out = dict(INSTRUCTIONS_DEFAULTS)
+    for key in ("enabled", "read_global"):
+        v = raw.get(key)
+        if v is None:
+            continue
+        n = v.strip().lower()
+        if n in ("true", "false"):
+            out[key] = n == "true"
+        else:
+            warnings.warn(
+                f"[instructions] {key} = {v!r} is not a boolean; using default",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    for key in ("budget_tokens", "per_file_tokens"):
+        v = raw.get(key)
+        if v is None:
+            continue
+        try:
+            n_int = int(v)
+            if n_int <= 0:
+                raise ValueError
+            out[key] = n_int
+        except (TypeError, ValueError):
+            warnings.warn(
+                f"[instructions] {key} = {v!r} is not a positive integer; using default",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    return out
+
+
+BILLING_KINDS = ("subscription", "metered", "unknown")
+_BILLING_DEFAULTS: dict[str, str] = {
+    "claude-agent": "subscription",
+    "codex-oauth": "subscription",
+    "env-anthropic": "metered",
+    "voss-anthropic": "metered",
+    "env-openai": "metered",
+    "voss-openai": "metered",
+    "codex": "metered",
+}
+
+
+def get_provider_billing(source: str) -> str:
+    """Billing kind for an auth `Resolution.source`: subscription | metered | unknown.
+
+    `[billing]` in config.toml overrides the built-in table, keyed by source name.
+    """
+    m = _BILLING_BLOCK.search(_read_config_text())
+    raw = dict(_KV_DASHED.findall(m.group(0))).get(source) if m else None
+    if raw is not None:
+        n = raw.strip().lower()
+        if n in BILLING_KINDS:
+            return n
+        warnings.warn(
+            f"[billing] {source} = {raw!r} is not one of {BILLING_KINDS}; using default",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return _BILLING_DEFAULTS.get(source, "unknown")
 
 
 def load_harness_config() -> dict[str, str]:

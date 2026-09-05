@@ -52,7 +52,7 @@ from .safety import (
 if TYPE_CHECKING:
     from .edit_scope import EditScope
 
-Mode = Literal["plan", "edit", "auto"]
+Mode = Literal["plan", "edit", "auto", "observe"]
 
 READ_ONLY = {"fs_read", "fs_glob", "fs_grep", "git_status", "git_diff", "voss_check"}
 WRITE = {"fs_write", "fs_edit"}
@@ -107,10 +107,15 @@ def match_permission_rules(
 def mode_allows(mode: Mode, tool_name: str, is_mutating: bool) -> tuple[bool, str]:
     """Strict tier check. Returns (allowed_by_mode, reason).
 
+    observe : read-only, never prompts — denies mutating, write, and shell tools.
     plan : read-only — denies all mutating tools.
     edit : reads + fs_write/fs_edit — explicitly denies shell_run.
     auto : everything — caller still enforces allowlist/timeouts downstream.
     """
+    if mode == "observe":
+        if is_mutating or tool_name in WRITE or tool_name in SHELL:
+            return False, "denied by mode observe"
+        return True, "ok"
     if mode == "plan":
         if is_mutating:
             return False, "denied by mode plan"
@@ -224,6 +229,8 @@ class PermissionGate:
             return False
         if self.mode == "auto":
             return False
+        if self.mode == "observe":
+            return False
         if self.mode == "plan":
             return tool_name not in READ_ONLY
         # edit
@@ -290,6 +297,11 @@ class PermissionGate:
              the diff render, so user sees the diff before deciding.
           4. Within-mode interactive prompt or auto-yes path.
         """
+        if self.mode == "observe" and (
+            is_mutating or is_network or tool_name in WRITE or tool_name in SHELL
+        ):
+            return False, "denied by mode observe"
+
         rule_decision: str | None = None
         if self.project_policy is not None:
             if tool_name in self.project_policy.tool_policy.deny:
