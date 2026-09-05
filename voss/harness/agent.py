@@ -32,6 +32,8 @@ from voss_runtime.providers import get as get_provider
 from voss_runtime.providers.base import ModelProvider
 
 from . import cognition as cognition_mod
+from . import instructions as instructions_mod
+from .config import get_instructions_config
 from . import telemetry
 from .permissions import PermissionGate
 from .providers import (
@@ -146,6 +148,35 @@ def _compose_cognition_prompt(
 
     truncated = _render(with_constraints=False)
     return truncated + "\n\n(constraints truncated due to budget)"
+
+
+def _compose_instructions_block(
+    bundle,
+    *,
+    budget: int = 4000,
+    renderer: Renderer | None = None,
+) -> str:
+    """Render the `## Instructions` block (AGENTS.md / CLAUDE.md bundle).
+
+    Budget enforcement happens in `instructions.load`; this only renders and
+    surfaces truncation as `instructions_overflow` on the renderer.
+    """
+    if bundle is None or not bundle.merged_text:
+        return ""
+    if bundle.truncated and renderer is not None:
+        try:
+            renderer.show_instructions_overflow(
+                instructions_tokens=bundle.tokens,
+                budget=budget,
+                truncated=list(bundle.truncated),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+    return render_package_template(
+        "voss",
+        "templates/agent/instructions_block.md.jinja",
+        {"merged_text": bundle.merged_text},
+    )
 
 
 def _compose_principles_block(
@@ -371,6 +402,7 @@ def _compose_system_blocks(
     *,
     voss_md_block: str,
     cognition_text: str,
+    instructions_text: str = "",
     principles_text: str = "",
     project_index_text: str = "",
     pinned_memory_text: str = "",
@@ -388,6 +420,7 @@ def _compose_system_blocks(
         {"type": "text", "text": text}
         for text in (
             voss_md_block,
+            instructions_text,
             cognition_text,
             principles_text,
             project_index_text,
@@ -666,6 +699,19 @@ async def _run_turn_exec(
         )
         prior_context_text = _compose_prior_context_block(prior_context)
         voss_md_block = f"# VOSS.md\n{voss_md_text}" if voss_md_text else ""
+        instructions_cfg = get_instructions_config()
+        instructions_bundle = instructions_mod.load(
+            cwd,
+            config=instructions_cfg,
+            token_count=lambda t: _default_token_count(t, model=model),
+        )
+        rec.instructions_hash = instructions_bundle.bundle_hash
+        rec.instructions_files = list(instructions_bundle.paths)
+        instructions_text = _compose_instructions_block(
+            instructions_bundle,
+            budget=int(instructions_cfg["budget_tokens"]),
+            renderer=renderer,
+        )
         # V2-02 VPRIN-04: resolve + inject the team's principles as a distinct
         # cacheable block (capped, overflow-warned) alongside cognition.
         principles_text = _compose_principles_block(
@@ -678,6 +724,7 @@ async def _run_turn_exec(
         sys_blocks = _compose_system_blocks(
             voss_md_block=voss_md_block,
             cognition_text=cognition_text,
+            instructions_text=instructions_text,
             principles_text=principles_text,
             project_index_text=project_index_text,
             pinned_memory_text=pinned_memory_text,

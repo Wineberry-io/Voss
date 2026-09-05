@@ -147,6 +147,8 @@ class RunRecord:
     capability_invocations: list[dict] = field(default_factory=list)
     # V12 VSAFE-05: safety factory-fallback rows (additive, back-compat default)
     factory_fallbacks: list[dict] = field(default_factory=list)
+    instructions_hash: str = ""
+    instructions_files: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.exit_reason is not None and self.exit_reason not in EXIT_REASONS:
@@ -170,11 +172,17 @@ class SessionRecord:
     # M9-06 fork lineage. Additive Optional; pre-M9 sessions hydrate as None.
     parent_id: Optional[str] = None
     parent_turn_index: Optional[int] = None
+    instructions_hash: str = ""
+    instructions_files: list[str] = field(default_factory=list)
 
     @classmethod
     def new(cls, *, cwd: Path, model: str, name: str = "") -> "SessionRecord":
         sid = uuid.uuid4().hex[:12]
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        from . import instructions as instructions_mod
+        from .config import get_instructions_config
+
+        bundle = instructions_mod.load(cwd, config=get_instructions_config())
         return cls(
             id=sid,
             name=name or f"session-{sid[:8]}",
@@ -182,6 +190,8 @@ class SessionRecord:
             model=model,
             started_at=now,
             updated_at=now,
+            instructions_hash=bundle.bundle_hash,
+            instructions_files=list(bundle.paths),
         )
 
     def first_task(self) -> str:

@@ -78,6 +78,9 @@ class Renderer(Protocol):
     def show_principles_overflow(
         self, *, principles_tokens: int, budget: int = 1000
     ) -> None: ...
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None: ...
     def show_warning(self, msg: str) -> None: ...
 
 
@@ -318,6 +321,15 @@ class TtyRenderer:
             f"tokens (over {budget} budget) — truncated[/yellow]"
         )
 
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        names = ", ".join(truncated or [])
+        self.console.print(
+            f"[yellow]{GLYPH_WARN} instruction files truncated to {budget} tokens "
+            f"({names})[/yellow]"
+        )
+
     def show_warning(self, msg: str) -> None:
         self.console.print(f"[yellow]{GLYPH_WARN} {msg}[/yellow]")
 
@@ -460,6 +472,15 @@ class CompactRenderer:
             f"principles block is {principles_tokens} tokens (over {budget})"
         )
 
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        names = ", ".join(truncated or [])
+        self.console.print(
+            f"[{ACCENT_ORANGE}]{GLYPH_WARN}[/{ACCENT_ORANGE}] "
+            f"instruction files truncated to {budget} tokens ({names})"
+        )
+
     def show_warning(self, msg: str) -> None:
         self.console.print(f"[{ACCENT_ORANGE}]{GLYPH_WARN}[/{ACCENT_ORANGE}] {msg}")
 
@@ -575,6 +596,15 @@ class PlainRenderer:
     ) -> None:
         print(
             f"principles overflow: {principles_tokens} > {budget}",
+            file=sys.stderr,
+        )
+
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        print(
+            f"instructions overflow: {instructions_tokens} > {budget} "
+            f"({', '.join(truncated or [])})",
             file=sys.stderr,
         )
 
@@ -698,6 +728,16 @@ class JsonRenderer:
             type="principles_overflow",
             principles_tokens=principles_tokens,
             budget=budget,
+        )
+
+    def show_instructions_overflow(
+        self, *, instructions_tokens: int, budget: int = 4000, truncated: list[str] | None = None
+    ) -> None:
+        self._emit(
+            type="instructions_overflow",
+            instructions_tokens=instructions_tokens,
+            budget=budget,
+            truncated=list(truncated or []),
         )
 
     def show_warning(self, msg: str) -> None:
