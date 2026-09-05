@@ -203,3 +203,39 @@ def test_budget_dropping_every_file_still_reports_truncation(tmp_path: Path) -> 
     b = instr.load(tmp_path, config={"budget_tokens": 50, "per_file_tokens": 50})
     assert b.merged_text == ""
     assert b.truncated == ("AGENTS.md",)
+
+
+def test_repeated_import_inlined_once(tmp_path: Path) -> None:
+    _w(tmp_path / "common.md", "common body\n")
+    _w(tmp_path / "AGENTS.md", "@common.md\n@common.md\nown\n")
+    b = instr.load(tmp_path)
+    assert b.merged_text.count("common body") == 1
+    assert b.load_errors == ()
+
+
+def test_nested_candidate_already_imported_by_root_is_collapsed(tmp_path: Path) -> None:
+    _w(tmp_path / "AGENTS.md", "@src/AGENTS.md\nroot\n")
+    _w(tmp_path / "src" / "AGENTS.md", "src rules\n")
+    b = instr.load(tmp_path, "src")
+    assert b.paths == ["AGENTS.md"]
+    assert b.collapsed == ("src/AGENTS.md",)
+    assert b.merged_text.count("src rules") == 1
+
+
+def test_rendered_block_never_exceeds_budget(tmp_path: Path) -> None:
+    _w(tmp_path / "AGENTS.md", "rule\n" * 3000)
+    _w(tmp_path / "CLAUDE.md", "other\n" * 3000)
+    for budget in (300, 1000, 4000):
+        b = instr.load(tmp_path, config={"budget_tokens": budget, "per_file_tokens": budget})
+        rendered = instr.BLOCK_FRAME + b.merged_text
+        assert instr._approx_tokens(rendered) <= budget, budget
+
+
+def test_hash_reflects_rendered_text_not_only_paths(tmp_path: Path) -> None:
+    _w(tmp_path / "AGENTS.md", "rule\n" * 3000)
+    cfg = {"budget_tokens": 1000, "per_file_tokens": 1000}
+    a = instr.load(tmp_path, config=cfg, token_count=lambda t: max(len(t) // 4, 1))
+    b = instr.load(tmp_path, config=cfg, token_count=lambda t: max(len(t) // 3, 1))
+    assert a.truncated == b.truncated == ("AGENTS.md",)
+    assert a.merged_text != b.merged_text
+    assert a.bundle_hash != b.bundle_hash
