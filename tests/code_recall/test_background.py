@@ -52,6 +52,14 @@ def _prepared_repo(tmp_path):
     return tmp_path
 
 
+def _release_and_join(service, gated_embed):
+    gated_embed.release()
+    thread = getattr(service, "_thread", None)
+    if thread is not None:
+        thread.join(timeout=30.0)
+        assert not thread.is_alive(), "background build thread must finish promptly"
+
+
 def test_first_roundtrip_not_blocked(tmp_path, gated_embed):
     """Session-start path returns before is_ready(): ensure_background_build
     must hand back control while embedding is still gated."""
@@ -61,16 +69,15 @@ def test_first_roundtrip_not_blocked(tmp_path, gated_embed):
 
     svc = CodeIndexService(repo, session_id="test-session")
     started = time.monotonic()
-    svc.ensure_background_build()
-    elapsed = time.monotonic() - started
+    try:
+        svc.ensure_background_build()
+        elapsed = time.monotonic() - started
 
-    assert elapsed < 2.0, "ensure_background_build must not wait for the build"
-    assert not svc.is_ready(), "build is gated — service cannot be ready yet"
+        assert elapsed < 2.0, "ensure_background_build must not wait for the build"
+        assert not svc.is_ready(), "build is gated — service cannot be ready yet"
 
-    gated_embed.release()
-    deadline = time.monotonic() + 30.0
-    while not svc.is_ready() and time.monotonic() < deadline:
-        time.sleep(0.05)
+    finally:
+        _release_and_join(svc, gated_embed)
     assert svc.is_ready(), "released build must reach ready"
 
 
@@ -81,14 +88,15 @@ def test_degraded_before_ready(tmp_path, gated_embed):
     from voss.harness.code.semantic_index import CodeIndexService
 
     svc = CodeIndexService(repo, session_id="test-session")
-    svc.ensure_background_build()
-    assert not svc.is_ready()
+    try:
+        svc.ensure_background_build()
+        assert not svc.is_ready()
 
-    hits = svc.query("retry backoff delay", top_k=5)
+        hits = svc.query("retry backoff delay", top_k=5)
 
-    assert isinstance(hits, list), "pre-ready query must return a hit list, not raise"
-    for hit in hits:
-        assert hit.source, "degraded hits still carry a source marker"
-        assert hit.locator
-
-    gated_embed.release()
+        assert isinstance(hits, list), "pre-ready query must return a hit list, not raise"
+        for hit in hits:
+            assert hit.source, "degraded hits still carry a source marker"
+            assert hit.locator
+    finally:
+        _release_and_join(svc, gated_embed)

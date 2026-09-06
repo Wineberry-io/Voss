@@ -117,12 +117,16 @@ async def test_fork_confirm_modal_esc_cancels() -> None:
 
 @pytest.mark.asyncio
 async def test_action_fork_turn_creates_new_session_and_flashes_status(
-    tmp_path: Path,
+    tmp_path: Path, mocker
 ) -> None:
     record = _seed_record(tmp_path)
 
     app = VossTUIApp()
     async with app.run_test() as pilot:
+        from voss.harness.tui.widgets.toast import Toast
+
+        toast = app.query_one("#toast", Toast)
+        show_toast = mocker.spy(toast, "show_toast")
         app.record = record
         app.focused_turn_index = 2
         app.action_fork_turn()
@@ -134,6 +138,7 @@ async def test_action_fork_turn_creates_new_session_and_flashes_status(
         sessions_dir = tmp_path / ".voss" / "sessions"
         files = sorted(p.name for p in sessions_dir.glob("*.json"))
         assert len(files) == 2  # original + fork
+        fork_id = next(name[:-5] for name in files if name != f"{record.id}.json")
 
         # Original untouched.
         original_path = sessions_dir / f"{record.id}.json"
@@ -141,13 +146,10 @@ async def test_action_fork_turn_creates_new_session_and_flashes_status(
         assert original_data["id"] == record.id
         assert original_data.get("parent_id") is None
 
-        # Flash uses UI-SPEC copy — R5: toasts render in the Toast overlay.
-        from voss.harness.tui.widgets.toast import Toast
-
-        toast = app.query_one("#toast", Toast)
-        assert toast.text_content is not None
-        assert "Resumed " in toast.text_content
-        assert "turns" in toast.text_content
+        show_toast.assert_called_once()
+        message = show_toast.call_args.args[0]
+        assert f"Resumed {fork_id}" in message
+        assert "3 turns" in message
 
 
 @pytest.mark.asyncio

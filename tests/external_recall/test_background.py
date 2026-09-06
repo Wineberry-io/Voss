@@ -57,6 +57,14 @@ def _snapshot_files(root):
     return snapshot
 
 
+def _release_and_join(service, gated_embed):
+    gated_embed.release()
+    thread = getattr(service, "_thread", None)
+    if thread is not None:
+        thread.join(timeout=30.0)
+        assert not thread.is_alive(), "background build thread must finish promptly"
+
+
 def test_session_does_not_block(tmp_path, monkeypatch, fixture_vault_path, gated_embed):
     """VXMEM-06: background build returns before embedding completes."""
     _vault, _source = _copy_and_configure(tmp_path, monkeypatch, fixture_vault_path)
@@ -75,7 +83,7 @@ def test_session_does_not_block(tmp_path, monkeypatch, fixture_vault_path, gated
         assert thread is not None
         assert thread.daemon is True
     finally:
-        gated_embed.release()
+        _release_and_join(svc, gated_embed)
 
 
 def test_degraded_before_ready(tmp_path, monkeypatch, fixture_vault_path, gated_embed):
@@ -95,7 +103,7 @@ def test_degraded_before_ready(tmp_path, monkeypatch, fixture_vault_path, gated_
         assert hits_per_source[0], "BM25 degradation should still find fixture docs"
         assert any("getting-started.md" in h.locator for h in hits_per_source[0])
     finally:
-        gated_embed.release()
+        _release_and_join(svc, gated_embed)
 
 
 def test_source_files_readonly(tmp_path, monkeypatch, fixture_vault_path, fake_embed_fn):

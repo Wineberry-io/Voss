@@ -7,7 +7,9 @@ coverage:
         informational: true
 comment:
   layout: "condensed_header, diff, files"
-  require_changes: true
+  require_changes: false
+  require_base: false
+  require_head: true
 ignore:
   - "tests/**"
   - "site/**"
