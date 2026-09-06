@@ -315,7 +315,7 @@ fn parse_layout(raw: &str) -> Result<LayoutFile, LayoutError> {
         Some(v) if (MIN_LAYOUT_VERSION as u64..=CURRENT_LAYOUT_VERSION as u64).contains(&v) => {
             let file: LayoutFile =
                 serde_json::from_value(value).map_err(|_| LayoutError::InvalidFile)?;
-            if file.grid.is_none() && file.nodes.as_ref().is_none_or(Vec::is_empty) {
+            if file.grid.is_none() && !file.nodes.as_ref().is_some_and(|n| !n.is_empty()) {
                 return Err(LayoutError::InvalidFile);
             }
             Ok(file)

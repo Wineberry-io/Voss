@@ -176,6 +176,8 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 **Goal:** the plane is pleasant to work in at any zoom, with the keyboard model from 49-IDE and the first non-terminal nodes.
 
+**Status:** executed 2026-09-06 on branch `s2-canvas-interaction`. Grid tree modules deleted; layout files are v2 (nodes/view/focusedId, v1 trees still load). Move mode, `prefix z/0/f` are tmux-profile prefix keys; New Terminal Node ⌘⇧T and New Note ⌘⇧N enter placement. FILES section added to the sidebar (FileTree was previously unmounted). Perf gate ran under headless Chromium on a 120 Hz panel, see `docs/canvas-perf.md`.
+
 ### Tasks
 
 - **S2.1 Drag + resize + snap.** Header drag moves; edge/corner handles resize; snap to other nodes' edges and centers within 8 world px with guide lines; hold ⌥ to disable snap. Multi-select: shift-click, shift-drag marquee on empty plane; drag moves the selection.
@@ -190,13 +192,13 @@ S0 and S1 run in parallel (no shared files). S3 and S2 run in parallel. S4 waits
 
 ### Definition of done
 
-- [ ] Snap/marquee/multi-drag with unit tests on the pure geometry
-- [ ] Placement mode, move mode, minimap, zoom-to-fit, fit-focused with tests
-- [ ] LOD chip + detach/reattach with a test asserting the xterm instance identity is unchanged
-- [ ] Arrangements replace presets; grid tree code deleted; `layouts.rs` stores arrangements
-- [ ] Note and file nodes with CodeMirror 6 pinned in `package.json`
-- [ ] `read_project_file` with path-escape tests in Rust
-- [ ] Perf script committed with numbers in `docs/canvas-perf.md`
+- [x] Snap/marquee/multi-drag with unit tests on the pure geometry (`snap.test.ts`, `geometry.test.ts`, `store.test.ts`, CanvasRoot AC-S2-1 + marquee cases)
+- [x] Placement mode, move mode, minimap, zoom-to-fit, fit-focused with tests (`camera.test.ts`, `minimapLayout.test.ts`, `moveMode.test.ts`, `prefixMode.test.ts`, CanvasRoot cases)
+- [x] LOD chip + detach/reattach with a test asserting the xterm instance identity is unchanged (CanvasRoot AC-S2-2)
+- [x] Arrangements replace presets; grid tree code deleted; `layouts.rs` stores arrangements (v2 nodes/view/focusedId, `grid` optional)
+- [x] Note and file nodes with CodeMirror 6 pinned in `package.json` (codemirror 6.0.2, state 6.7.4, view 6.43.11, language 6.12.4, lang-* and legacy-modes exact)
+- [x] `read_project_file` with path-escape tests in Rust (`project.rs` AC-S2-5 test: traversal, absolute, symlink, 3 MiB, directory)
+- [x] Perf script committed with numbers in `docs/canvas-perf.md` (`scripts/test-canvas-perf.ts` + `e2e/canvas-perf.spec.ts`)
 
 ### Acceptance criteria
 
@@ -505,4 +507,11 @@ AC-S1-4 — src/canvas/__tests__/CanvasRoot.test.tsx (drag left → index 1) + s
 AC-S1-5 — src/canvas/__tests__/CanvasRoot.test.tsx (view reaches mirror after debounce) + session.test.ts view round-trip — 2026-09-05
 AC-S1-6 — src/__tests__/App.test.tsx, a5-acceptance, liveReviewToggle pass against the canvas host — 2026-09-05
 AC-S1-7 — src/canvas/__tests__/CanvasRoot.test.tsx (boots to one node at origin) + e2e canvas-ac7 — 2026-09-05
+AC-S2-1 — src/canvas/__tests__/snap.test.ts + CanvasRoot.test.tsx (snap to A right edge, ⌥ disables) + e2e/canvas-nodes.spec.ts canvas-s2-ac1 — 2026-09-06
+AC-S2-2 — src/canvas/__tests__/CanvasRoot.test.tsx (12 chips below 0.6, same PaneSession/term after zoom back) + e2e canvas-s2-ac2 (12 chips, 12 xterm back, 12 spawns total) — 2026-09-06
+AC-S2-3 — docs/canvas-perf.md: zoom 1 p95 11.6 ms (≤16); zoom 0.5 p95 8.9 ms against the 8 ms bar, judged as no dropped frames on a 120 Hz panel (median 8.3 ms) — 2026-09-06
+AC-S2-4 — src/canvas/__tests__/arrange.test.ts snapshot for 1/2/4/7 nodes per preset + e2e canvas-ac6 — 2026-09-06
+AC-S2-5 — crates/voss-app-core/src/project.rs::ac_s2_5_read_project_file_rejects_escapes_and_oversize_and_reads_normal_files + NoteFileNodes.test.tsx (error shown) — 2026-09-06
+AC-S2-6 — src/canvas/__tests__/session.test.ts (note text + file path/line round trip) + e2e canvas-s2-ac6 (note text reaches the mirror, preview after blur); file line reopen covered by CanvasRoot openFile test — 2026-09-06
+AC-S2-7 — src/canvas/__tests__/camera.test.ts + CanvasRoot.test.tsx (reduced-motion pan is instant; tween ≤200 ms otherwise) — 2026-09-06
 ```

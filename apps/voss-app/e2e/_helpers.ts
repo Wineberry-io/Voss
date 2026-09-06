@@ -47,8 +47,8 @@ export interface MockConfig {
   /** Result of the native folder dialog (plugin:dialog|open). Default: null
    *  (cancel). Set to a path string to simulate a folder pick. */
   dialogOpenResult?: string | null;
-  /** Per-command extra overrides: command name → return value. Applied after
-   *  all built-in defaults, so these win. Values must be JSON-serializable. */
+  /** Per-command overrides: command name → return value. Checked before the
+   *  built-in defaults, so these win. Values must be JSON-serializable. */
   commandOverrides?: Record<string, unknown>;
   /** Track sync_grid calls into window.__SYNCS__ (default: true). */
   trackSyncs?: boolean;
@@ -89,8 +89,11 @@ export async function installTauriMock(
     let nextPty = 1;
     const syncs: unknown[] = [];
     (window as unknown as { __SYNCS__: unknown[] }).__SYNCS__ = syncs;
+    const ptyChannels: unknown[] = [];
+    (window as unknown as { __PTY_CHANNELS__: unknown[] }).__PTY_CHANNELS__ = ptyChannels;
 
     const invoke = (cmd: string, args?: Record<string, unknown>): unknown => {
+      if (cmd in c.commandOverrides) return c.commandOverrides[cmd];
       switch (cmd) {
         case 'load_workspaces_index':
           return {
@@ -119,6 +122,7 @@ export async function installTauriMock(
         case 'default_cwd':
           return '/tmp/voss-e2e-proj';
         case 'spawn_pty':
+          if (args?.onData) ptyChannels.push(args.onData);
           return `mock-pty-${nextPty++}`;
         case 'spawn_agent':
           return `mock-agent-${nextPty++}`;
@@ -186,8 +190,6 @@ export async function installTauriMock(
         case 'plugin:event|listen':
           return nextCallbackId++;
         default:
-          // Per-command overrides win, else null (nothing saved).
-          if (cmd in c.commandOverrides) return c.commandOverrides[cmd];
           return null;
       }
     };

@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:flood-perf": "tsx scripts/test-flood-perf.ts",
+    "test:canvas-perf": "tsx scripts/test-canvas-perf.ts",
     "check:xterm-pin": "node -e \"let v;try{v=require('./node_modules/@xterm/xterm/package.json').version}catch{v=require('./package.json').dependencies['@xterm/xterm']}if(v!=='5.5.0'){console.error('xterm pin violation: expected 5.5.0, got '+v);process.exit(1)}console.log('xterm pin ok: '+v)\""
   },
   "dependencies": {
