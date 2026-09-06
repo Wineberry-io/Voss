@@ -64,7 +64,21 @@ jobs:
           fi
       - name: snap11 isolation probe (temporary)
         continue-on-error: true
-        run: pytest -q tests/harness/tui/test_paste_image.py --snapshot-report=snapshot_report_probe.html
+        run: |
+          P=tests/harness/tui/test_paste_image.py
+          M="not live and not slow"
+          echo "::group::probe A analyzer cli code_recall codegen"
+          pytest -q -m "$M" tests/analyzer tests/cli tests/code_recall tests/codegen $P --snapshot-report=snapshot_report_probeA.html || true
+          echo "::endgroup::"
+          echo "::group::probe B e2e eval examples external_recall"
+          pytest -q -m "$M" tests/e2e tests/eval tests/examples tests/external_recall $P --snapshot-report=snapshot_report_probeB.html || true
+          echo "::endgroup::"
+          echo "::group::probe C harness minus tui"
+          pytest -q -m "$M" tests/harness --ignore=tests/harness/tui $P --snapshot-report=snapshot_report_probeC.html || true
+          echo "::endgroup::"
+          echo "::group::probe D tui dir"
+          pytest -q -m "$M" tests/harness/tui --snapshot-report=snapshot_report_probeD.html || true
+          echo "::endgroup::"
       - run: pytest -q -m "$PYTEST_MARKERS" --cov=voss_runtime --cov-report=term-missing --cov-report=xml
         env:
           PYTEST_MARKERS: ${{ github.event_name == 'pull_request' && 'not live and not slow' || 'not live' }}
@@ -72,9 +86,7 @@ jobs:
         if: failure()
         with:
           name: snapshot-report-${{ matrix.python-version }}
-          path: |
-            snapshot_report.html
-            snapshot_report_probe.html
+          path: snapshot_report*.html
           if-no-files-found: ignore
       - uses: codecov/codecov-action@v7
         if: ${{ !cancelled() && matrix.python-version == '3.12' }}
