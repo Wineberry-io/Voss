@@ -56,7 +56,35 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int):
         yield
     finally:
         snapshot_plugin.save_svg_diffs = original_save_svg_diffs
+        _drain_index_builds()
         _report_exit_state()
+
+
+_INDEX_BUILD_TARGETS = {"CodeIndexService._build_loop", "ExternalRecallService._build_loop"}
+_INDEX_BUILD_DRAIN_S = 300.0
+
+
+def _drain_index_builds() -> None:
+    """Join background index builders before interpreter teardown.
+
+    make_toolset() starts CodeIndexService / ExternalRecallService builds on
+    daemon threads that load sentence-transformers. A daemon thread frozen
+    inside torch while Python finalizes makes the process abort with
+    'terminate called without an active exception' after pytest has already
+    reported success. Waiting for the in-flight builds keeps the exit clean.
+    """
+    import threading
+    import time
+
+    deadline = time.monotonic() + _INDEX_BUILD_DRAIN_S
+    for t in threading.enumerate():
+        target = getattr(t, "_target", None)
+        if getattr(target, "__qualname__", None) not in _INDEX_BUILD_TARGETS:
+            continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        t.join(timeout=remaining)
 
 
 def _report_exit_state() -> None:
