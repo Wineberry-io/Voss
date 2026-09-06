@@ -5,8 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from voss.harness.board.verdict import ReviewerVerdict, Reviewer
-from voss.harness.board.machine import Board, Card, _BoardConfig, _DEFAULT_WIP, _read_board_spec
+from voss.harness.board.verdict import ReviewerVerdict
 from voss.harness.session_tree import SessionTreeManager, SessionTreeNode
 from voss.harness.team import (
     BoardSpec,
@@ -14,7 +13,6 @@ from voss.harness.team import (
     TeamConfig,
     TeamPolicy,
     TeamRoleScope,
-    RitualSpec,
 )
 
 

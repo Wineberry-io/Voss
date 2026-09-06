@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from tests.codegen.test_examples import _compile_example
 from tests.codegen.test_snapshots import _assert_readable_snapshot

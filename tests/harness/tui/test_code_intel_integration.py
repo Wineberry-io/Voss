@@ -5,7 +5,6 @@ Verifies that slash results reach the CodeIntelPanel via the M9-08 private metho
 without the backend importing TUI modules.
 """
 
-import pytest
 
 
 def test_code_intel_tui_bridge_exists():

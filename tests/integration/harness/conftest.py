@@ -12,7 +12,6 @@ from typing import Optional
 import pytest
 
 from voss.harness.em.handle import EMBoardHandle
-from voss.harness.em.protocols import TERMINAL_COLUMNS
 from voss.harness.permissions import PermissionGate
 from voss.harness.session_tree import SessionTreeManager, SessionTreeNode
 from voss.harness.subagents import SubagentRegistry, SubagentSpec

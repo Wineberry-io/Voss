@@ -197,7 +197,7 @@ def _prompt_menu(deps: _Deps) -> str:
 def _branch_claude(deps: _Deps) -> Optional[Resolution]:
     cli = deps.detect("claude")
     if cli is None:
-        deps.console.print(f"[yellow]`claude` CLI not found on PATH.[/yellow]")
+        deps.console.print("[yellow]`claude` CLI not found on PATH.[/yellow]")
         deps.console.print(CLAUDE_INSTALL_HINT)
         return None
 
@@ -218,7 +218,7 @@ def _branch_claude(deps: _Deps) -> Optional[Resolution]:
 def _branch_codex(deps: _Deps) -> Optional[Resolution]:
     cli = deps.detect("codex")
     if cli is None:
-        deps.console.print(f"[yellow]`codex` CLI not found on PATH.[/yellow]")
+        deps.console.print("[yellow]`codex` CLI not found on PATH.[/yellow]")
         deps.console.print(CODEX_INSTALL_HINT)
         return None
 

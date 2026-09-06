@@ -1,10 +1,8 @@
 """M9-04 RecorderBridge tests — read-only consumer of RunRecorder."""
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
 
 from voss.harness.recorder import RunRecorder
 from voss.harness.tui.recorder_bridge import RecorderBridge

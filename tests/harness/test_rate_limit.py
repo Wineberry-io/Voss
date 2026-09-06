@@ -12,7 +12,6 @@ import pytest
 from voss.harness import config as harness_config
 from voss.harness.config import (
     _NET_RATE_BLOCK,
-    _parse_net_rate_limits_section,
     get_net_rate_limits,
 )
 from voss.harness.rate_limit import (

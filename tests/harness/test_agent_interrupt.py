@@ -5,7 +5,6 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -14,7 +13,6 @@ from voss.harness.agent import Plan, _run_turn_exec
 from voss.harness.providers import (
     Done,
     ParsedPlan,
-    ProviderStreamEvent,
     TextDelta,
     Usage,
 )

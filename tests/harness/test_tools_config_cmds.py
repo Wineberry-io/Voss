@@ -1,9 +1,7 @@
 """`voss tools` + `voss config` CLI tests (CLIH-07, CLIH-09)."""
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss.harness.cli import config_cmd, tools_cmd

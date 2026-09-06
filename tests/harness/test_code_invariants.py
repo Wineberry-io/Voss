@@ -2,7 +2,6 @@
 M10-06 forbidden-scope and runtime invariant regression suite.
 """
 
-import pytest
 
 from pathlib import Path
 

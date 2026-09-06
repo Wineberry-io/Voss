@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from voss.harness.em import EMBoardHandle, BoardSnapshot
+from voss.harness.em import BoardSnapshot
 from voss.harness.em.errors import EMCageViolation
 from voss.harness.em.tickets import Ticket
 
-from .conftest import StubCard
 
 
 class TestCreateTicket:

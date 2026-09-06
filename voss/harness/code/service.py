@@ -14,7 +14,7 @@ import re
 from . import ast_grep, regex_fallback
 from .index import build_index, find_symbols, list_files
 from .lsp_registry import LspRegistry
-from .models import CodeLocation, ReferenceHit, SearchHit, SymbolHit
+from .models import CodeLocation, IndexSummary, SearchHit, SymbolHit
 
 
 class CodeIntelService:

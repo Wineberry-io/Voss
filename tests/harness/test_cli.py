@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss.harness.cli import main

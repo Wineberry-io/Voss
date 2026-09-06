@@ -5,12 +5,11 @@ import pytest
 
 from voss.harness.em.loop import em_loop
 from voss.harness.em.schema import (
-    CreateTicketOp, DispatchCardOp, EMPlanResponse, NoopOp,
+    CreateTicketOp, EMPlanResponse, NoopOp,
 )
 from voss.harness.em.stub import DeterministicEMStub
 from voss.harness.em.tickets import RunFinal
 
-from .conftest import StubBoard
 
 
 class TestEmLoopHappyPath:

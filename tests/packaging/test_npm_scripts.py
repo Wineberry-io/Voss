@@ -16,7 +16,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 from tests.packaging.test_entrypoint import _repo_root
 

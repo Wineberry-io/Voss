@@ -1,7 +1,6 @@
 """O3-01 Task 2: ReviewerVerdict + Reviewer Protocol + error classes."""
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import FrozenInstanceError, fields
 
 import pytest

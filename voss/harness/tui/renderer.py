@@ -19,15 +19,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from rich.text import Text
 
 from .. import render as render_mod
 from . import glyphs
 from .app import VossTUIApp
 from .widgets import (
     BudgetExhaustedModal,
-    BudgetMeter,
-    CodeIntelPanel,
     ConfidenceBar,
     DiffDecision,
     DiffModal,

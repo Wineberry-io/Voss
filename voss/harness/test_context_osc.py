@@ -6,9 +6,8 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 
-from .recorder import ContextTracker, FileContextState, _emit_context_osc
+from .recorder import ContextTracker, _emit_context_osc
 
 
 class TestContextTrackerTrackFile:

@@ -4,7 +4,6 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 
 from voss.harness.permissions import PermissionGate
 from voss.harness.skill.adapter import make_voss_skill_handler

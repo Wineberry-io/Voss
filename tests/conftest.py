@@ -32,3 +32,27 @@ def _restore_provider_env() -> None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int):
+    try:
+        import pytest_textual_snapshot as snapshot_plugin
+    except ImportError:
+        yield
+        return
+
+    original_save_svg_diffs = snapshot_plugin.save_svg_diffs
+
+    def save_svg_diffs_without_environment(diffs, report_session, num_snapshots_passing):
+        for diff in diffs:
+            diff.environment = {}
+        return original_save_svg_diffs(
+            diffs, report_session, num_snapshots_passing
+        )
+
+    snapshot_plugin.save_svg_diffs = save_svg_diffs_without_environment
+    try:
+        yield
+    finally:
+        snapshot_plugin.save_svg_diffs = original_save_svg_diffs

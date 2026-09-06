@@ -4,7 +4,6 @@ Optional live LSP server tests (M10-02 Task 3).
 These are skipped unless the environment explicitly opts in.
 """
 
-import os
 import shutil
 
 import pytest

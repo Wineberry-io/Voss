@@ -1,7 +1,6 @@
 """Wave 1 RunRecorder tests (COG-08 mechanical capture, M2-02)."""
 from __future__ import annotations
 
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 

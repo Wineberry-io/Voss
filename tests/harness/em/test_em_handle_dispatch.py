@@ -1,12 +1,9 @@
 """O5-02: Dispatch path — routing rationale emission, gate_for_role plumb, kill/rescope flow."""
 from __future__ import annotations
 
-import pytest
 
-from voss.harness.em import EMBoardHandle
 from voss.harness.em.tickets import KillRecord, RescopeRecord, RoutingRationale
 
-from .conftest import StubCard
 
 
 class TestDispatchRoutingRationale:

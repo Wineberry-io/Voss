@@ -5,7 +5,7 @@ import pytest
 
 from voss.harness.em.loop import em_loop
 from voss.harness.em.schema import (
-    CreateTicketOp, DispatchCardOp, EMPlanResponse, NoopOp,
+    DispatchCardOp, EMPlanResponse, NoopOp,
 )
 from voss.harness.em.stub import DeterministicEMStub
 from voss.harness.em.tickets import RoutingRationale

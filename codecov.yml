@@ -1,0 +1,17 @@
+coverage:
+  status:
+    project: off
+    patch:
+      default:
+        target: auto
+        informational: true
+comment:
+  layout: "condensed_header, diff, files"
+  require_changes: false
+  require_base: false
+  require_head: true
+ignore:
+  - "tests/**"
+  - "site/**"
+  - ".planning/**"
+  - "voss-demos/**"

@@ -10,7 +10,6 @@ Non-win32 platforms are unaffected.
 """
 from __future__ import annotations
 
-import os
 
 import pytest
 

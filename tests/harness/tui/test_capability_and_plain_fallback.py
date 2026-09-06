@@ -1,8 +1,6 @@
 """M9-01 capability + --plain + auto-fallback + min-size guard tests."""
 from __future__ import annotations
 
-import importlib
-import sys
 
 import pytest
 

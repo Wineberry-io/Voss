@@ -4,7 +4,6 @@ import importlib.resources
 import tomllib
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from voss import parse

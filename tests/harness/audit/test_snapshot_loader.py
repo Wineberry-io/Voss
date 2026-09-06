@@ -17,10 +17,7 @@ from voss.harness.audit.model import (
     AuditSnapshot,
     KillRecord,
     Leak6Assessment,
-    LivenessEvent,
     RescopeRecord,
-    ReviewerAssessment,
-    RoutingRationale,
 )
 
 

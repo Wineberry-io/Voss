@@ -21,7 +21,6 @@ from typing import Callable, Literal, Optional
 
 from voss.harness.session_tree import (
     SessionTreeManager,
-    SessionTreeNode,
     _write_node_file,
     finalize_node,
 )
@@ -35,7 +34,6 @@ from .gates import (
     GateContext,
     a_verification_passes,
     b_passes,
-    conf_meets_p,
     eval_meets_threshold,
     human_approved,
     scope_clean,

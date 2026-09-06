@@ -1,4 +1,4 @@
-from voss.ast_nodes import UseStmt, FnDecl, ClassDecl, Decorator, Arg, FloatLit
+from voss.ast_nodes import UseStmt, FnDecl, ClassDecl
 
 def test_use_simple(parse_source):
     p = parse_source("use foo::bar")

@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from voss.harness.em import EMBoardHandle
 from voss.harness.em.errors import EMCageViolation
 from voss.harness.team import TeamRoleScope
 
-from .conftest import StubCard
 
 
 FORBIDDEN_METHODS = {

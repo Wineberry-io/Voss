@@ -1,5 +1,4 @@
-from voss import parse
-from voss.ast_nodes import LetStmt, IntLit, IfStmt, ConfidenceGate
+from voss.ast_nodes import LetStmt, IntLit, ConfidenceGate
 
 def test_let_stmt_span_lines(parse_source):
     src = "\n\nlet x = 42"   # let on line 3

@@ -13,7 +13,6 @@ SPEC PAR-03 acceptance fixtures (a/b/c/d) + edge cases:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 

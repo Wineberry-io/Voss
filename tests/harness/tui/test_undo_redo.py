@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 import types
 
-import pytest
 
 from voss.harness.cli import _build_slash_registry
 

@@ -1,4 +1,4 @@
-from voss.ast_nodes import PromptDecl, ClassDecl, ClassField, StringLit, QualName, TypeRef
+from voss.ast_nodes import PromptDecl, ClassDecl, QualName, TypeRef
 
 def test_prompt_simple(parse_source):
     src = '''

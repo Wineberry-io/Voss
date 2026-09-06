@@ -13,7 +13,6 @@ from voss.ast_nodes import (
     Param,
     QualName,
     ReturnStmt,
-    Span,
     StringLit,
     TypeRef,
 )

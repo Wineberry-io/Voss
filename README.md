@@ -7,6 +7,7 @@
 **A language for confidence-aware, budget-bounded LLM programs.**
 
 [![CI](https://github.com/voss-lang/voss/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/voss-lang/voss/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/voss-lang/voss/branch/master/graph/badge.svg)](https://codecov.io/gh/voss-lang/voss)
 [![npm version](https://img.shields.io/npm/v/@vosslang/cli.svg)](https://www.npmjs.com/package/@vosslang/cli)
 [![npm downloads](https://img.shields.io/npm/dm/@vosslang/cli.svg)](https://www.npmjs.com/package/@vosslang/cli)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)

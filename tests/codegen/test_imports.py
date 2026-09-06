@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import builtins
 
-import pytest
 
 from voss.ast_nodes import UseStmt
 from voss.codegen import ImportCollector, generate_python

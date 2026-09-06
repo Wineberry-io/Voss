@@ -8,7 +8,6 @@ from typing import Protocol, Sequence
 
 from .ast_nodes import (
     AgentDecl,
-    Arg,
     BinOp,
     BoolLit,
     BudgetArg,
@@ -26,14 +25,12 @@ from .ast_nodes import (
     IntLit,
     LetStmt,
     ListLit,
-    MatchCase,
     MatchStmt,
     Member,
     Node,
     NullLit,
     Param,
     Program,
-    QualName,
     ReturnStmt,
     SimilarPattern,
     Stmt,

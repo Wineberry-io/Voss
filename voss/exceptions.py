@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 class VossError(Exception):
     """Base for all voss compiler errors."""

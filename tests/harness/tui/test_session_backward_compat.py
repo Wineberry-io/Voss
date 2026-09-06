@@ -9,7 +9,6 @@ import dataclasses
 import json
 from pathlib import Path
 
-import pytest
 
 from voss.harness import session as session_store
 from voss.harness.session import SessionRecord

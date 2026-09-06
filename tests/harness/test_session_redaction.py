@@ -8,7 +8,6 @@ from __future__ import annotations
 import dataclasses
 import json
 from dataclasses import asdict
-from pathlib import Path
 
 import pytest
 
