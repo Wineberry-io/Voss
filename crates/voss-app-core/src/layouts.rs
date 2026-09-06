@@ -24,10 +24,13 @@ use crate::canvas::{CanvasNode, CanvasView};
 use crate::grid::GridState;
 
 /// On-disk integer version. Bump when the schema shape changes.
-pub const CURRENT_LAYOUT_VERSION: u32 = 1;
+pub const CURRENT_LAYOUT_VERSION: u32 = 2;
+/// Oldest version still accepted on load. v1 carries a split tree that the
+/// webview migrates to canvas nodes.
+pub const MIN_LAYOUT_VERSION: u32 = 1;
 
-/// Persisted layout file. Wraps `GridState` with a version tag and the
-/// active preset name (None = custom geometry).
+/// Persisted layout file: canvas arrangement plus the active preset name
+/// (None = custom geometry). v1 files carry a split tree instead of nodes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayoutFile {
@@ -36,24 +39,46 @@ pub struct LayoutFile {
     /// Stored as a free string here — the TS layer validates against
     /// `LayoutPreset` after load (LAY-01..05 own the closed cycle).
     pub active_preset: Option<String>,
-    pub grid: GridState,
-    /// S1 canvas geometry. Absent on layouts saved before the canvas; the
+    /// v1 split tree; absent on v2 files written from the canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<GridState>,
+    /// Canvas geometry. Absent on v1 layouts saved before the canvas; the
     /// webview then derives node positions from `grid`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nodes: Option<Vec<CanvasNode>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<CanvasView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focused_id: Option<String>,
 }
 
 impl LayoutFile {
-    /// Build a v1 LayoutFile from the in-memory grid mirror.
+    /// Build a LayoutFile from a legacy grid mirror (tests + migration).
     pub fn new(grid: GridState, active_preset: Option<String>) -> Self {
         Self {
             version: CURRENT_LAYOUT_VERSION,
             active_preset,
-            grid,
+            grid: Some(grid),
             nodes: None,
             view: None,
+            focused_id: None,
+        }
+    }
+
+    /// Build a v2 LayoutFile from canvas nodes.
+    pub fn from_canvas(
+        nodes: Vec<CanvasNode>,
+        view: CanvasView,
+        focused_id: String,
+        active_preset: Option<String>,
+    ) -> Self {
+        Self {
+            version: CURRENT_LAYOUT_VERSION,
+            active_preset,
+            grid: None,
+            nodes: Some(nodes),
+            view: Some(view),
+            focused_id: Some(focused_id),
         }
     }
 }
@@ -287,8 +312,13 @@ fn parse_layout(raw: &str) -> Result<LayoutFile, LayoutError> {
         serde_json::from_str(raw).map_err(|_| LayoutError::InvalidFile)?;
     let version = value.get("version").and_then(|v| v.as_u64());
     match version {
-        Some(v) if v == CURRENT_LAYOUT_VERSION as u64 => {
-            serde_json::from_value(value).map_err(|_| LayoutError::InvalidFile)
+        Some(v) if (MIN_LAYOUT_VERSION as u64..=CURRENT_LAYOUT_VERSION as u64).contains(&v) => {
+            let file: LayoutFile =
+                serde_json::from_value(value).map_err(|_| LayoutError::InvalidFile)?;
+            if file.grid.is_none() && file.nodes.as_ref().is_none_or(Vec::is_empty) {
+                return Err(LayoutError::InvalidFile);
+            }
+            Ok(file)
         }
         Some(_) => Err(LayoutError::UnsupportedVersion),
         None => Err(LayoutError::InvalidFile),
@@ -343,16 +373,47 @@ mod tests {
     // --- Task 1: schema + validation --------------------------------------
 
     #[test]
-    fn layout_file_round_trips_through_json_with_version_1() {
+    fn layout_file_round_trips_through_json_with_version_2() {
         let original = LayoutFile::new(sample_grid(), Some("fanout".into()));
         assert_eq!(original.version, CURRENT_LAYOUT_VERSION);
-        assert_eq!(CURRENT_LAYOUT_VERSION, 1);
+        assert_eq!(CURRENT_LAYOUT_VERSION, 2);
         let json = serde_json::to_string(&original).expect("serialize");
-        assert!(json.contains("\"version\":1"));
+        assert!(json.contains("\"version\":2"));
         assert!(json.contains("\"activePreset\":\"fanout\""));
         assert!(json.contains("\"focusedId\""));
         let back: LayoutFile = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(original, back);
+    }
+
+    #[test]
+    fn canvas_layout_serializes_without_a_tree() {
+        let nodes = crate::canvas::CanvasState::default().nodes;
+        let file = LayoutFile::from_canvas(
+            nodes,
+            crate::canvas::CanvasView::default(),
+            "root".into(),
+            None,
+        );
+        let json = serde_json::to_string(&file).unwrap();
+        assert!(!json.contains("\"grid\""), "{json}");
+        assert!(json.contains("\"focusedId\":\"root\""), "{json}");
+        let back = parse_layout(&json).unwrap();
+        assert_eq!(back, file);
+    }
+
+    #[test]
+    fn v1_layout_with_tree_still_loads() {
+        let raw = r#"{"version":1,"activePreset":"pipeline","grid":{"root":{"kind":"pane","id":"a","cwd":"/","shell":"zsh","index":1},"focusedId":"a"}}"#;
+        let file = parse_layout(raw).unwrap();
+        assert_eq!(file.version, 1);
+        assert!(file.grid.is_some());
+        assert!(file.nodes.is_none());
+    }
+
+    #[test]
+    fn layout_without_tree_or_nodes_is_invalid() {
+        let raw = r#"{"version":2,"activePreset":null}"#;
+        assert!(matches!(parse_layout(raw), Err(LayoutError::InvalidFile)));
     }
 
     #[test]

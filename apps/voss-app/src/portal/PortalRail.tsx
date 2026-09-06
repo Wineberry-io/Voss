@@ -26,7 +26,7 @@ import PanelLeftOpen from 'lucide-solid/icons/panel-left-open';
 import Settings from 'lucide-solid/icons/settings';
 import { PORTAL_ITEMS, type PortalItem, type PortalView } from './portalTypes';
 import PresetSwitcher from '../components/titlebar/PresetSwitcher';
-import type { ActiveLayout, LayoutPreset } from '../grid/layoutPresets';
+import type { ActiveLayout, LayoutPreset } from '../canvas/arrange';
 import './portal.css';
 
 export interface PortalRailProps {

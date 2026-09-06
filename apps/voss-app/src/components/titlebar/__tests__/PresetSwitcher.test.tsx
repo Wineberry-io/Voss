@@ -3,7 +3,7 @@ import { render } from 'solid-js/web';
 import { fireEvent } from '@testing-library/dom';
 
 import PresetSwitcher from '../PresetSwitcher';
-import type { ActiveLayout, LayoutPreset } from '../../../grid/layoutPresets';
+import type { ActiveLayout, LayoutPreset } from '../../../canvas/arrange';
 
 /**
  * A4-02 Task 1 — PresetSwitcher is a controlled component.

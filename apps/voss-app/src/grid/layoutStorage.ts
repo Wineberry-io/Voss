@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { GridStore } from './tree';
-import type { LayoutPreset } from './layoutPresets';
+import type { LayoutPreset } from '../canvas/arrange';
+import type { LegacyGridStore } from '../canvas/migrate';
 import type { CanvasNode, CanvasView } from '../canvas/model';
 
 /**
@@ -17,12 +17,14 @@ import type { CanvasNode, CanvasView } from '../canvas/model';
 
 /** Wire-level layout shape — mirrors Rust `voss_app_core::layouts::LayoutFile`. */
 export type LayoutFile = {
-  version: 1;
+  version: 1 | 2;
   activePreset: LayoutPreset | null;
-  grid: GridStore;
-  /** S1 canvas geometry; absent on layouts saved before the canvas. */
+  /** v1 split tree; v2 files written from the canvas omit it. */
+  grid?: LegacyGridStore;
+  /** Canvas geometry; absent on v1 layouts saved before the canvas. */
   nodes?: CanvasNode[];
   view?: CanvasView;
+  focusedId?: string;
 };
 
 // --- Exact UI-SPEC copy ----------------------------------------------------

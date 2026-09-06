@@ -2,8 +2,8 @@ import { For, Show } from 'solid-js';
 import type {
   ActiveLayout,
   LayoutPreset,
-} from '../../grid/layoutPresets';
-import { LAYOUT_PRESETS } from '../../grid/layoutPresets';
+} from '../../canvas/arrange';
+import { LAYOUT_PRESETS } from '../../canvas/arrange';
 
 /**
  * Controlled titlebar preset switcher (A4-02 Task 1, A4-UI-SPEC).

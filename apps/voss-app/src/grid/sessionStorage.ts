@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { GridStore } from './tree';
-import type { LayoutPreset } from './layoutPresets';
+import type { LayoutPreset } from '../canvas/arrange';
+import type { LegacyGridStore } from '../canvas/migrate';
 import type { CanvasState } from '../canvas/model';
 
 /**
@@ -22,7 +22,7 @@ export type SessionPane = {
 export type SessionFileV1 = {
   version: 1;
   activePreset: LayoutPreset | null;
-  grid: GridStore;
+  grid: LegacyGridStore;
   panes: SessionPane[];
   projectLessAccepted: boolean;
 };
@@ -33,7 +33,7 @@ export type SessionFileV2 = {
   activePreset: LayoutPreset | null;
   /** Absent only for files Rust wrote from a legacy tree; `grid` is set then. */
   canvas?: CanvasState;
-  grid?: GridStore;
+  grid?: LegacyGridStore;
   panes: SessionPane[];
   projectLessAccepted: boolean;
 };

@@ -2,10 +2,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { batch, createMemo, createSignal, type Accessor } from 'solid-js';
 import type { CanvasController } from '../canvas/CanvasRoot';
 import { applySessionFile, layoutToSession } from '../canvas/session';
-import type { ActiveLayout } from '../grid/layoutPresets';
+import type { ActiveLayout } from '../canvas/arrange';
 import { loadDefaultLayout, loadLayout } from '../grid/layoutStorage';
 import { loadGlobalSession, loadSession, type SessionFile } from '../grid/sessionStorage';
-import type { NativeSessionRecord } from '../grid/SplitNode';
+import type { NativeSessionRecord } from '../canvas/CanvasRoot';
 import type { AgentConfig } from '../pane/pty-ipc';
 import {
   defaultCwd,

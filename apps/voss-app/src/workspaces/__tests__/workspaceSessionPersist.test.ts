@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makePane, makeSplit } from '../../grid/tree';
+import { makePane, makeSplit } from '../../canvas/__tests__/legacyTree';
 
 const h = vi.hoisted(() => ({
   onCloseRequested: vi.fn(),

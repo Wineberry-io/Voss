@@ -31,7 +31,7 @@ import PortalShell from '../portal/PortalShell';
 import { PORTAL_ITEMS } from '../portal/portalTypes';
 import ContextSurface from '../surfaces/context/ContextSurface';
 import MemorySurface from '../surfaces/memory/MemorySurface';
-import type { LayoutPreset } from '../grid/layoutPresets';
+import type { LayoutPreset } from '../canvas/arrange';
 import type { AgentHost } from './agentHost';
 import type { KeymapHost } from './keymapHost';
 import type { LiveBoot } from './liveBoot';

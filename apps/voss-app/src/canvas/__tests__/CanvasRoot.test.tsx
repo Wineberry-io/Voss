@@ -17,7 +17,7 @@ vi.mock('../../pane/PaneComponent', () => ({
   },
 }));
 
-import { makePane, makeSplit, recomputeIndices as treeIndices } from '../../grid/tree';
+import { makePane, makeSplit, recomputeIndices as treeIndices } from './legacyTree';
 import type { SessionFileV1 } from '../../grid/sessionStorage';
 import CanvasRoot, { type CanvasController } from '../CanvasRoot';
 import { NODE_GAP } from '../model';

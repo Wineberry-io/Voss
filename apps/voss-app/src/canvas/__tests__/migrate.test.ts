@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { makePane, makeSplit, recomputeIndices, type TreeNode } from '../../grid/tree';
-import { gridToCanvas, treeToNodes } from '../migrate';
+import { makePane, makeSplit, recomputeIndices } from './legacyTree';
+import { gridToCanvas, treeToNodes, type LegacyTreeNode } from '../migrate';
 import { NODE_GAP } from '../model';
 
 describe('v1 tree → nodes', () => {
@@ -8,7 +8,7 @@ describe('v1 tree → nodes', () => {
     const a = makePane({ cwd: '/a', shell: 'zsh' });
     const b = makePane({ cwd: '/b', shell: 'zsh' });
     const c = makePane({ cwd: '/c', shell: 'zsh' });
-    const root: TreeNode = makeSplit('H', a, makeSplit('V', b, c));
+    const root: LegacyTreeNode = makeSplit('H', a, makeSplit('V', b, c));
     root.ratio = 0.25;
     recomputeIndices(root);
 

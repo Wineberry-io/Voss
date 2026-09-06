@@ -1,15 +1,14 @@
 /**
- * Canvas ↔ session.json / layout file helpers (S1). Pure: no DOM, Solid,
- * Tauri, or xterm. Callers own scrollback extraction and store assignment.
+ * Canvas ↔ session.json / layout file helpers. Pure: no DOM, Solid, Tauri,
+ * or xterm. Callers own scrollback extraction and store assignment.
  */
-import type { ActiveLayout, LayoutPreset } from '../grid/layoutPresets';
+import { isLayoutPreset, type ActiveLayout } from './arrange';
 import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile, SessionFileV2, SessionPane } from '../grid/sessionStorage';
 
 /** A v2 file this module wrote: `canvas` is always present. */
 export type CanvasSessionFile = SessionFileV2 & { canvas: CanvasState };
-import type { GridStore, TreeNode } from '../grid/tree';
-import { gridToCanvas } from './migrate';
+import { gridToCanvas, type LegacyGridStore } from './migrate';
 import {
   defaultView,
   makeNode,
@@ -51,10 +50,14 @@ export function cloneCanvas(state: CanvasState): CanvasState {
   };
 }
 
-function sessionGrid(session: SessionFile): GridStore {
+function sessionGrid(session: SessionFile): LegacyGridStore {
   if (session.version === 1) return session.grid;
   if (session.grid) return session.grid;
   throw new Error('session file has neither canvas nor grid');
+}
+
+function activeLayoutOf(preset: string | null): ActiveLayout {
+  return isLayoutPreset(preset) ? preset : 'custom';
 }
 
 function resolveFocus(state: CanvasState): string {
@@ -90,9 +93,6 @@ export function applySessionFile(session: SessionFile): CanvasRestoreResult {
       : gridToCanvas(sessionGrid(session));
   recomputeIndices(canvas.nodes);
   canvas.focusedId = resolveFocus(canvas);
-  const activeLayout: ActiveLayout = session.activePreset
-    ? (session.activePreset as LayoutPreset)
-    : 'custom';
   const ids = new Set(canvas.nodes.map((n) => n.id));
   const restoredScrollbackByPaneId = new Map<string, string[]>();
   for (const pane of session.panes) {
@@ -100,7 +100,7 @@ export function applySessionFile(session: SessionFile): CanvasRestoreResult {
       restoredScrollbackByPaneId.set(pane.id, pane.scrollback);
     }
   }
-  return { canvas, activeLayout, restoredScrollbackByPaneId };
+  return { canvas, activeLayout: activeLayoutOf(session.activePreset), restoredScrollbackByPaneId };
 }
 
 /** Nodes a layout describes: its own canvas geometry, else its migrated tree. */
@@ -108,11 +108,11 @@ export function layoutCanvas(layout: LayoutFile): CanvasState {
   if (layout.nodes && layout.nodes.length > 0) {
     const nodes = layout.nodes.map(cloneNode);
     recomputeIndices(nodes);
-    const grid = layout.grid as GridStore | undefined;
-    const focusedId =
-      grid && nodes.some((n) => n.id === grid.focusedId) ? grid.focusedId : nodes[0]!.id;
+    const saved = layout.focusedId ?? layout.grid?.focusedId;
+    const focusedId = saved && nodes.some((n) => n.id === saved) ? saved : nodes[0]!.id;
     return { nodes, view: layout.view ?? defaultView(), focusedId };
   }
+  if (!layout.grid) throw new Error('layout file has neither nodes nor grid');
   return gridToCanvas(layout.grid);
 }
 
@@ -130,34 +130,17 @@ export function layoutToSession(
   };
 }
 
-/** Equal-width H chain of leaves: the `grid` a layout file still has to carry. */
-function chainTree(nodes: readonly CanvasNode[]): TreeNode {
-  const leaf = (n: CanvasNode): TreeNode => ({
-    kind: 'pane',
-    id: n.id,
-    cwd: n.cwd,
-    shell: n.shell,
-    index: n.index,
-  });
-  const build = (rest: readonly CanvasNode[]): TreeNode =>
-    rest.length === 1
-      ? leaf(rest[0])
-      : { kind: 'split', orientation: 'H', ratio: 1 / rest.length, left: leaf(rest[0]), right: build(rest.slice(1)) };
-  return build(nodes);
-}
-
 export function serializeLayout(
   state: CanvasState,
   activeLayout: ActiveLayout,
 ): LayoutFile {
   const canvas = cloneCanvas(state);
-  const ordered = orderedNodes(canvas);
   return {
-    version: 1,
+    version: 2,
     activePreset: activeLayout === 'custom' ? null : activeLayout,
-    grid: { root: chainTree(ordered), focusedId: canvas.focusedId },
-    nodes: ordered,
+    nodes: orderedNodes(canvas),
     view: canvas.view,
+    focusedId: canvas.focusedId,
   };
 }
 
@@ -175,7 +158,8 @@ export function applyLayoutToCanvas(
   current: CanvasState,
   layout: LayoutFile,
 ): LayoutApplyResult {
-  const saved = orderedNodes(layoutCanvas(layout));
+  const savedCanvas = layoutCanvas(layout);
+  const saved = orderedNodes(savedCanvas);
   const live = orderedNodes(cloneCanvas(current));
   const next: CanvasNode[] = [];
   const count = Math.max(saved.length, live.length);
@@ -191,18 +175,15 @@ export function applyLayoutToCanvas(
     }
   }
   recomputeIndices(next);
-  const savedFocus = layout.grid?.focusedId;
+  const savedFocus = savedCanvas.focusedId;
   const focusedId =
-    savedFocus && next.some((n) => n.id === savedFocus)
+    next.some((n) => n.id === savedFocus)
       ? savedFocus
       : next.some((n) => n.id === current.focusedId)
         ? current.focusedId
         : next[0]!.id;
-  const activeLayout: ActiveLayout = layout.activePreset
-    ? (layout.activePreset as LayoutPreset)
-    : 'custom';
   return {
     canvas: { nodes: next, view: layout.view ?? current.view, focusedId },
-    activeLayout,
+    activeLayout: activeLayoutOf(layout.activePreset),
   };
 }

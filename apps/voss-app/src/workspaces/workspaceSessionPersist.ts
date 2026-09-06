@@ -1,11 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { subscribeStructuralChange } from '../grid/sync';
+import { subscribeStructuralChange } from '../canvas/sync';
 import { buildSessionFile } from '../canvas/session';
 import { saveSession } from '../grid/sessionStorage';
 import { getScrollbackSnapshot } from '../pane/scrollbackRegistry';
 import type { CanvasController } from '../canvas/CanvasRoot';
-import type { ActiveLayout } from '../grid/layoutPresets';
+import type { ActiveLayout } from '../canvas/arrange';
 import type { WorkspacesIndex } from './workspaceStorage';
 import { saveProjectLessSession } from './workspaceStorage';
 

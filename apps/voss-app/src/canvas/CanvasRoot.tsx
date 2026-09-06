@@ -7,12 +7,10 @@ import { budgetByPaneId } from '../pane/budgetRegistry';
 import { procByPaneId } from '../pane/procRegistry';
 import { isKnownAgentCli } from '../pane/agentDetect';
 import { destroyPaneSession, reapOrphanPaneSessions } from '../pane/paneSessionRegistry';
-import type { NativeSessionRecord } from '../grid/SplitNode';
 import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile } from '../grid/sessionStorage';
-import { nextPreset, type ActiveLayout, type LayoutPreset } from '../grid/layoutPresets';
 import NodeFrame from './NodeFrame';
-import { applyArrangement, type Arrangement } from './arrange';
+import { applyArrangement, nextPreset, type ActiveLayout, type Arrangement, type LayoutPreset } from './arrange';
 import { boundsOf, centerOn, fitToBounds, screenToWorld, zoomAt } from './geometry';
 import {
   createCanvasState,
@@ -40,6 +38,12 @@ import { markCanvasChange, markCanvasDragMove, markCanvasDragSettled, resetCanva
 export interface CloseUI {
   isFg: (paneId: string) => boolean;
   fgName: (paneId: string) => string;
+}
+
+/** Native server session backing a structured (non-PTY) pane. */
+export interface NativeSessionRecord {
+  sessionId: string;
+  sidecarId: string;
 }
 
 /** Imperative handle App composes with. Superset of the old GridController. */
@@ -210,11 +214,11 @@ export default function CanvasRoot(props: {
       const before = store.nodes.map((n) => n.id);
       const result = applySessionFile(session);
       const remapped = applyLayoutToCanvas(plain(), {
-        version: 1,
+        version: 2,
         activePreset: session.activePreset,
-        grid: { root: { kind: 'pane', id: result.canvas.focusedId, cwd: '', shell: '', index: 1 }, focusedId: result.canvas.focusedId },
         nodes: result.canvas.nodes,
         view: result.canvas.view,
+        focusedId: result.canvas.focusedId,
       });
       setStore(produce((s) => {
         s.nodes = remapped.canvas.nodes;

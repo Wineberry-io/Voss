@@ -1,8 +1,9 @@
 /**
  * session.json / layout v1 (binary split tree) → canvas nodes. Each leaf
- * becomes a node at the rect the tree's ratios gave it inside `box`.
+ * becomes a node at the rect the tree's ratios gave it inside `box`. The
+ * legacy tree types live here because this is the only code that still
+ * reads them; the Rust `grid.rs` mirror round-trips the same keys.
  */
-import type { GridStore, TreeNode } from '../grid/tree';
 import {
   MIN_NODE_H,
   MIN_NODE_W,
@@ -14,11 +15,34 @@ import {
 } from './model';
 import type { Size } from './geometry';
 
+export type LegacySplitNode = {
+  kind: 'split';
+  orientation: 'H' | 'V';
+  ratio: number;
+  left: LegacyTreeNode;
+  right: LegacyTreeNode;
+};
+
+export type LegacyPaneLeaf = {
+  kind: 'pane';
+  id: string;
+  cwd: string;
+  shell: string;
+  index: number;
+};
+
+export type LegacyTreeNode = LegacySplitNode | LegacyPaneLeaf;
+
+export type LegacyGridStore = {
+  root: LegacyTreeNode;
+  focusedId: string;
+};
+
 export const MIGRATION_BOX: Size = { w: 1600, h: 1000 };
 
-export function treeToNodes(root: TreeNode, box: Size = MIGRATION_BOX): CanvasNode[] {
+export function treeToNodes(root: LegacyTreeNode, box: Size = MIGRATION_BOX): CanvasNode[] {
   const out: CanvasNode[] = [];
-  const walk = (n: TreeNode, x: number, y: number, w: number, h: number) => {
+  const walk = (n: LegacyTreeNode, x: number, y: number, w: number, h: number) => {
     if (n.kind === 'pane') {
       out.push({
         id: n.id,
@@ -49,7 +73,7 @@ export function treeToNodes(root: TreeNode, box: Size = MIGRATION_BOX): CanvasNo
   return out;
 }
 
-export function gridToCanvas(grid: GridStore, box: Size = MIGRATION_BOX): CanvasState {
+export function gridToCanvas(grid: LegacyGridStore, box: Size = MIGRATION_BOX): CanvasState {
   const nodes = treeToNodes(grid.root, box);
   const focusedId = nodes.some((n) => n.id === grid.focusedId)
     ? grid.focusedId

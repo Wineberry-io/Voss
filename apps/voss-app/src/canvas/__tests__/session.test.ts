@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makePane, makeSplit, recomputeIndices as treeIndices } from '../../grid/tree';
+import { makePane, makeSplit, recomputeIndices as treeIndices } from './legacyTree';
 import type { SessionFileV1 } from '../../grid/sessionStorage';
 import {
   applyLayoutToCanvas,
@@ -79,13 +79,13 @@ describe('session v2', () => {
 });
 
 describe('layouts', () => {
-  it('serialize carries nodes, view, and a compatible grid chain', () => {
+  it('serialize carries nodes, view, and focus without a tree', () => {
     const file = serializeLayout(two(), 'swarm');
-    expect(file.version).toBe(1);
+    expect(file.version).toBe(2);
     expect(file.activePreset).toBe('swarm');
     expect(file.nodes!.map((n) => n.id)).toEqual(['a', 'b']);
-    expect(file.grid.root.kind).toBe('split');
-    expect(file.grid.focusedId).toBe('b');
+    expect(file.grid).toBeUndefined();
+    expect(file.focusedId).toBe('b');
     expect(file.view!.zoom).toBe(0.8);
   });
 
@@ -99,6 +99,13 @@ describe('layouts', () => {
     const legacy = layoutToSession({ version: 1, activePreset: null, grid: { root: p, focusedId: p.id } }, false);
     expect(legacy.canvas.nodes[0].id).toBe(p.id);
     expect(legacy.canvas.nodes[0].cwd).toBe('/x');
+  });
+
+  it('a v1 layout with nodes but no focusedId takes focus from its tree', () => {
+    const s = two();
+    const p = makePane({ cwd: '/x', shell: 'sh' });
+    const r = layoutToSession({ version: 1, activePreset: null, grid: { root: p, focusedId: 'b' }, nodes: s.nodes, view: s.view }, false);
+    expect(r.canvas.focusedId).toBe('b');
   });
 
   it('apply remaps live nodes and spawns or keeps extras without losing ids', () => {

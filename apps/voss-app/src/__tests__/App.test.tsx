@@ -83,9 +83,6 @@ vi.mock('../workspaces/workspaceStorage', async (importOriginal) => {
     saveProjectLessSession: vi.fn().mockResolvedValue(undefined),
   };
 });
-vi.mock('../grid/sessionCommands', () => ({
-  layoutToSession: vi.fn((layout: unknown) => layout),
-}));
 vi.mock('../command-palette/CommandPalette', () => ({
   default: () => null,
 }));

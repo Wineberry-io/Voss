@@ -1,7 +1,7 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { orderedNodes } from '../canvas/model';
 import { devlog } from '../devlog';
-import type { NativeSessionRecord } from '../grid/SplitNode';
+import type { NativeSessionRecord } from '../canvas/CanvasRoot';
 import { setLiveServer, setLiveServerConnector } from '../org/live/liveServer';
 import { startVossServe } from '../org/live/sidecarClient';
 import { destroyProtocolSession } from '../org/live/protocolSessions';

@@ -25,12 +25,33 @@ describe('arrangements', () => {
     }
   });
 
-  it('pipeline is one row, fanout puts the first on top full width', () => {
+  it('pipeline is one row; fanout puts the first on the left at half width; watchers on top full width', () => {
     const p = arrangeRects('pipeline', 3, box);
     expect(new Set(p.map((r) => r.y)).size).toBe(1);
     const f = arrangeRects('fanout', 3, box);
-    expect(f[0]).toMatchObject({ x: 0, y: 0, w: box.w });
-    expect(f[1].y).toBe(f[0].h + NODE_GAP);
+    expect(f[0]).toMatchObject({ x: 0, y: 0, h: box.h });
+    expect(f[0].w).toBe(Math.round((box.w - NODE_GAP) / 2));
+    expect(f[1].x).toBe(f[0].w + NODE_GAP);
+    expect(f[2].y).toBeGreaterThan(f[1].y);
+    const w = arrangeRects('watchers', 3, box);
+    expect(w[0]).toMatchObject({ x: 0, y: 0, w: box.w });
+    expect(w[1].y).toBe(w[0].h + NODE_GAP);
+    expect(w[2].x).toBeGreaterThan(w[1].x);
+  });
+
+  it('swarm caps at four columns; grid does not', () => {
+    const s = arrangeRects('swarm', 20, { w: 4000, h: 3000 });
+    expect(new Set(s.map((r) => r.x)).size).toBe(4);
+    const g = arrangeRects('grid', 20, { w: 4000, h: 3000 });
+    expect(new Set(g.map((r) => r.x)).size).toBe(5);
+  });
+
+  it('AC-S2-4: preset silhouettes are stable for 1, 2, 4, 7 nodes', () => {
+    const out: Record<string, unknown> = {};
+    for (const a of ['fanout', 'pipeline', 'swarm', 'watchers'] as const) {
+      for (const n of [1, 2, 4, 7]) out[`${a}/${n}`] = arrangeRects(a, n, box);
+    }
+    expect(out).toMatchSnapshot();
   });
 
   it('applyArrangement writes rects onto nodes in order', () => {
