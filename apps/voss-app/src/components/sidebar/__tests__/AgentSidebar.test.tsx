@@ -30,12 +30,12 @@ const defaultProps = () => ({
 });
 
 describe('AgentSidebar', () => {
-  it('renders 3 section headings', () => {
+  it('renders 4 section headings', () => {
     const p = defaultProps();
     const el = mount(() => <AgentSidebar {...p} />);
     const labels = el.querySelectorAll('.sidebar-section-label');
     const texts = Array.from(labels).map((l) => l.textContent?.trim());
-    expect(texts).toEqual(['AGENTS', 'ACTIVITY', 'USAGE']);
+    expect(texts).toEqual(['AGENTS', 'ACTIVITY', 'USAGE', 'FILES']);
   });
 
   it('collapsed renders with sidebar--collapsed class', () => {

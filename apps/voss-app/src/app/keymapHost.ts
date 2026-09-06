@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { createMemo, createSignal } from 'solid-js';
 import { serializeLayout } from '../canvas/session';
 import { normalizeChord, normalizePrefixKey } from '../command-palette/chords';
@@ -11,7 +12,7 @@ import {
 import { setAsAppMenu } from '../command-palette/nativeMenu';
 import { moveModeDirection } from '../command-palette/moveMode';
 import { createPrefixMode } from '../command-palette/prefixMode';
-import { buildQuickOpenItems } from '../command-palette/quickOpen';
+import { buildQuickOpenItems, flattenFiles, type DirEntryLike } from '../command-palette/quickOpen';
 import {
   appearanceCommands,
   createCommandRegistry,
@@ -30,6 +31,7 @@ import type { WorkspaceHost } from './workspaceHost';
 export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
   const [paletteMode, setPaletteMode] = createSignal<'quick' | 'full' | null>(null);
   const [layoutNames, setLayoutNames] = createSignal<string[]>([]);
+  const [fileNames, setFileNames] = createSignal<string[]>([]);
   const [keymapProfile, setKeymapProfile] = createSignal<KeymapProfile>('vscode');
   const [keymapOverrides, setKeymapOverrides] = createSignal<KeyBindingOverrides>({});
   const [prefixActive, setPrefixActive] = createSignal(false);
@@ -46,14 +48,18 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
   const openPalette = (mode: 'quick' | 'full') => {
     setPaletteMode(mode);
     const id = ws.activeId();
-    if (mode === 'quick' && id && ws.activeMounted()?.project()) {
+    const projectPath = ws.activeMounted()?.project()?.path;
+    if (mode === 'quick' && id && projectPath) {
       void listLayouts(id)
         .then(setLayoutNames)
         .catch(() => setLayoutNames([]));
+      void invoke<DirEntryLike[]>('list_dir', { path: projectPath })
+        .then((entries) => setFileNames(flattenFiles(entries)))
+        .catch(() => setFileNames([]));
     }
   };
   const dismissPalette = () => setPaletteMode(null);
-  const quickItems = () => buildQuickOpenItems(layoutNames(), ws.recents());
+  const quickItems = () => buildQuickOpenItems(layoutNames(), ws.recents(), fileNames());
 
   const saveCurrentLayout = async (workspaceId: string, name: string): Promise<void> => {
     const ctrl = ws.gridController();
@@ -73,6 +79,8 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
       if (workspaceId && ws.gridController()) void loadLayoutByName(workspaceId, id.slice('layout:'.length));
     } else if (id.startsWith('recent:')) {
       void ws.openSelectedProject(id.slice('recent:'.length), 'palette open_recent failed:');
+    } else if (id.startsWith('file:')) {
+      ws.gridController()?.openFile(id.slice('file:'.length));
     } else {
       dispatchCommandId(id);
     }
@@ -111,6 +119,7 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
     zoomToFocused: () => ctrl()?.zoomToFocused(),
     moveMode: () => setMoveMode(true),
     newTerminalNode: () => ctrl()?.placeNode('terminal'),
+    newNoteNode: () => ctrl()?.placeNode('note'),
     openQuickPalette: () => openPalette('quick'),
     openFullPalette: () => openPalette('full'),
     openProject: () => void ws.handleOpenFolder(),

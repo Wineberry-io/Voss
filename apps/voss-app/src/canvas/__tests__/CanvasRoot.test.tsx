@@ -6,6 +6,10 @@ const h = vi.hoisted(() => ({
   mounts: new Map<string, number>(),
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: h.invoke }));
+vi.mock('../editor', () => ({
+  languageForPath: () => 'plain',
+  createEditor: () => ({ getDoc: () => '', setDoc: () => {}, revealLine: () => {}, focus: () => {}, destroy: () => {} }),
+}));
 vi.mock('../../pane/PaneComponent', () => ({
   default: (p: { id: string; index?: number; restoredScrollback?: string[] }) => {
     h.mounts.set(p.id, (h.mounts.get(p.id) ?? 0) + 1);
@@ -376,6 +380,40 @@ describe('CanvasRoot', () => {
     const after = ctrl().snapshot().view;
     expect(after.zoom).toBe(before.zoom);
     expect(after).not.toEqual(before);
+  });
+
+  it('openFile adds a file node beside the focused node once and refocuses it with a new line afterwards', () => {
+    h.invoke.mockResolvedValue({ path: 'src/a.ts', content: '', language: 'typescript', size: 0 });
+    const { el, ctrl } = mountCanvas({ workspacePath: '/ws' });
+    const term = ctrl().snapshot().nodes[0];
+    ctrl().openFile('src/a.ts', 7);
+    let nodes = ctrl().snapshot().nodes;
+    expect(nodes).toHaveLength(2);
+    expect(nodes[1]).toMatchObject({ kind: 'file', file: { path: 'src/a.ts', line: 7 }, x: term.x + term.w + NODE_GAP });
+    expect(ctrl().snapshot().focusedId).toBe(nodes[1].id);
+    expect(el.querySelector('[data-file-node="src/a.ts"]')).not.toBeNull();
+    expect(el.querySelectorAll('[data-mock-pane-id]')).toHaveLength(1);
+
+    ctrl().focusIndex(1);
+    ctrl().openFile('src/a.ts', 30);
+    nodes = ctrl().snapshot().nodes;
+    expect(nodes).toHaveLength(2);
+    expect(nodes[1].file).toEqual({ path: 'src/a.ts', line: 30 });
+    expect(ctrl().snapshot().focusedId).toBe(nodes[1].id);
+  });
+
+  it('a placed note starts empty and updateNote persists text to the snapshot and mirror', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().placeNode('note');
+    const root = el.querySelector('.canvas-root') as HTMLElement;
+    root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 400, clientY: 300 }));
+    const note = ctrl().snapshot().nodes[1];
+    expect(note).toMatchObject({ kind: 'note', note: { text: '' } });
+    expect(el.querySelector('[data-note-node]')).not.toBeNull();
+    h.invoke.mockClear();
+    ctrl().updateNote(note.id, '# hi');
+    expect(ctrl().snapshot().nodes[1].note).toEqual({ text: '# hi' });
+    expect(syncCalls().at(-1)![1].newState.nodes[1].note).toEqual({ text: '# hi' });
   });
 
   it('pointercancel settles a header drag and clears the in-flight flag', () => {

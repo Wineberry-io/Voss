@@ -9,9 +9,11 @@ type DirEntry = {
 
 export interface FileTreeProps {
   projectPath: string | null;
+  /** Click on a file; receives the workspace-relative path. */
+  onOpenFile?: (relPath: string) => void;
 }
 
-function TreeNode(props: { entry: DirEntry; depth: number; parentPath: string; expandedPaths: Set<string>; onToggle: (path: string) => void }) {
+function TreeNode(props: { entry: DirEntry; depth: number; parentPath: string; expandedPaths: Set<string>; onToggle: (path: string) => void; onOpenFile?: (fullPath: string) => void }) {
   const fullPath = () => `${props.parentPath}/${props.entry.name}`;
   const isExpanded = () => props.expandedPaths.has(fullPath());
 
@@ -24,12 +26,14 @@ function TreeNode(props: { entry: DirEntry; depth: number; parentPath: string; e
           'padding-left': `${props.depth * 12}px`,
           padding: `2px 8px 2px ${props.depth * 12 + 8}px`,
           gap: '4px',
-          cursor: props.entry.is_dir ? 'pointer' : 'default',
+          cursor: props.entry.is_dir || props.onOpenFile ? 'pointer' : 'default',
         }}
+        data-file-entry={props.entry.is_dir ? undefined : fullPath()}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         onClick={() => {
           if (props.entry.is_dir) props.onToggle(fullPath());
+          else props.onOpenFile?.(fullPath());
         }}
       >
         <span style={{
@@ -62,6 +66,7 @@ function TreeNode(props: { entry: DirEntry; depth: number; parentPath: string; e
               parentPath={fullPath()}
               expandedPaths={props.expandedPaths}
               onToggle={props.onToggle}
+              onOpenFile={props.onOpenFile}
             />
           )}
         </For>
@@ -132,6 +137,10 @@ const FileTree: Component<FileTreeProps> = (props) => {
               parentPath={props.projectPath!}
               expandedPaths={expandedPaths()}
               onToggle={toggleExpand}
+              onOpenFile={(full) => {
+                const root = props.projectPath!;
+                props.onOpenFile?.(full.startsWith(`${root}/`) ? full.slice(root.length + 1) : full);
+              }}
             />
           )}
         </For>

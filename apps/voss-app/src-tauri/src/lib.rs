@@ -1392,6 +1392,19 @@ fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     Ok(read_dir_shallow(&canonical, 2))
 }
 
+#[tauri::command]
+fn read_project_file(
+    workspace_path: String,
+    rel_path: String,
+    max_bytes: Option<u64>,
+) -> Result<voss_app_core::ProjectFile, String> {
+    let limit = max_bytes
+        .unwrap_or(voss_app_core::MAX_PROJECT_FILE_BYTES)
+        .min(voss_app_core::MAX_PROJECT_FILE_BYTES);
+    voss_app_core::read_project_file(Path::new(&workspace_path), &rel_path, limit)
+        .map_err(|e| e.to_string())
+}
+
 #[derive(Debug, serde::Serialize)]
 struct GitCommit {
     hash: String,
@@ -2267,6 +2280,7 @@ pub fn run() {
             load_custom_agents,
             save_custom_agents,
             list_dir,
+            read_project_file,
             git_log,
             load_run,
             enumerate_runs,

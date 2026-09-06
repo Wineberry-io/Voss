@@ -68,6 +68,7 @@
     "allow-load-custom-agents",
     "allow-save-custom-agents",
     "allow-list-dir",
+    "allow-read-project-file",
     "allow-git-log",
     "allow-open-orchestration-console",
     "allow-ui-log"

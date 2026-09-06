@@ -8,6 +8,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct NotePayload {
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePayload {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CanvasNode {
     pub id: String,
     pub kind: String,
@@ -19,6 +33,10 @@ pub struct CanvasNode {
     pub index: u32,
     pub cwd: String,
     pub shell: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<NotePayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<FilePayload>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -61,6 +79,8 @@ impl Default for CanvasState {
                 index: 1,
                 cwd: String::new(),
                 shell: String::new(),
+                note: None,
+                file: None,
             }],
             view: CanvasView::default(),
             focused_id: "root".into(),
@@ -94,6 +114,40 @@ mod tests {
         assert!(json.contains("\"focusedId\""), "{json}");
         assert!(json.contains("\"kind\":\"terminal\""), "{json}");
         assert!(json.contains("\"zoom\":1.0"), "{json}");
+        let back: CanvasState = serde_json::from_str(&json).unwrap();
+        assert_eq!(s, back);
+    }
+
+    #[test]
+    fn note_and_file_payloads_round_trip_and_stay_absent_on_terminals() {
+        let mut s = CanvasState::default();
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!json.contains("\"note\""), "{json}");
+        assert!(!json.contains("\"file\""), "{json}");
+        s.nodes[0].kind = "file".into();
+        s.nodes[0].file = Some(FilePayload {
+            path: "src/main.rs".into(),
+            line: Some(12),
+        });
+        s.nodes.push(CanvasNode {
+            id: "n".into(),
+            kind: "note".into(),
+            x: 0.0,
+            y: 0.0,
+            w: 360.0,
+            h: 240.0,
+            z: 2,
+            index: 2,
+            cwd: String::new(),
+            shell: String::new(),
+            note: Some(NotePayload {
+                text: "# hi".into(),
+            }),
+            file: None,
+        });
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("\"file\":{\"path\":\"src/main.rs\",\"line\":12}"), "{json}");
+        assert!(json.contains("\"note\":{\"text\":\"# hi\"}"), "{json}");
         let back: CanvasState = serde_json::from_str(&json).unwrap();
         assert_eq!(s, back);
     }

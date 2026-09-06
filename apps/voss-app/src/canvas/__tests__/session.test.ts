@@ -145,3 +145,31 @@ describe('review follow-ups', () => {
     expect(r.canvas.nodes[1].kind).toBe('native');
   });
 });
+
+describe('note and file payloads', () => {
+  it('AC-S2-6: note text and file path/line survive a session round trip', () => {
+    const s = two();
+    s.nodes[0].kind = 'note';
+    s.nodes[0].note = { text: '# keep me' };
+    s.nodes[1].kind = 'file';
+    s.nodes[1].file = { path: 'src/main.rs', line: 12 };
+    (s.nodes[1] as unknown as { runtime: string }).runtime = 'leak';
+    const file = buildSessionFile(s, 'custom', new Map(), false);
+    expect(file.canvas.nodes[0].note).toEqual({ text: '# keep me' });
+    expect(file.canvas.nodes[1].file).toEqual({ path: 'src/main.rs', line: 12 });
+    expect(Object.keys(file.canvas.nodes[1])).not.toContain('runtime');
+    const back = applySessionFile(JSON.parse(JSON.stringify(file)));
+    expect(back.canvas.nodes[0]).toMatchObject({ kind: 'note', note: { text: '# keep me' } });
+    expect(back.canvas.nodes[1]).toMatchObject({ kind: 'file', file: { path: 'src/main.rs', line: 12 } });
+    expect(back.canvas.nodes[0].file).toBeUndefined();
+  });
+
+  it('layout slots spawn note and file nodes with their payloads', () => {
+    const s = two();
+    s.nodes[1].kind = 'note';
+    s.nodes[1].note = { text: 'n' };
+    const saved = serializeLayout(s, 'custom');
+    const r = applyLayoutToCanvas(createCanvasState({ cwd: '/live' }), saved);
+    expect(r.canvas.nodes[1]).toMatchObject({ kind: 'note', note: { text: 'n' } });
+  });
+});

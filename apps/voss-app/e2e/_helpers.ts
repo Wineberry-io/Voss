@@ -147,6 +147,8 @@ export async function installTauriMock(
           return [];
         case 'list_layouts':
           return c.layoutNames;
+        case 'read_project_file':
+          return { path: args?.relPath, content: `// ${args?.relPath}\nexport const x = 1;\n`, language: 'typescript', size: 32 };
         case 'load_session':
         case 'load_global_session':
         case 'load_project_less_session':

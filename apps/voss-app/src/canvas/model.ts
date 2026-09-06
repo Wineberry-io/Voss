@@ -3,7 +3,10 @@
  * geometry; there is no split tree. Field names are the wire contract: the
  * Rust mirror (`canvas.rs`) and `session.json` v2 round-trip these keys.
  */
-export type NodeKind = 'terminal' | 'native';
+export type NodeKind = 'terminal' | 'native' | 'note' | 'file';
+
+export type NotePayload = { text: string };
+export type FilePayload = { path: string; line?: number };
 
 export type CanvasNode = {
   id: string;
@@ -17,6 +20,8 @@ export type CanvasNode = {
   index: number;
   cwd: string;
   shell: string;
+  note?: NotePayload;
+  file?: FilePayload;
 };
 
 export type CanvasView = {
@@ -43,6 +48,11 @@ export const CELL_H = 20;
 export const MIN_NODE_W = FLOOR_COLS * CELL_W;
 export const MIN_NODE_H = FLOOR_ROWS * CELL_H + HEADER_PX;
 
+export const DEFAULT_NOTE_W = 360;
+export const DEFAULT_NOTE_H = 240;
+export const DEFAULT_FILE_W = 640;
+export const DEFAULT_FILE_H = 480;
+
 export const ZOOM_MIN = 0.25;
 export const ZOOM_MAX = 2.5;
 
@@ -56,8 +66,10 @@ export function makeNode(defaults?: {
   w?: number;
   h?: number;
   kind?: NodeKind;
+  note?: NotePayload;
+  file?: FilePayload;
 }): CanvasNode {
-  return {
+  const node: CanvasNode = {
     id: crypto.randomUUID(),
     kind: defaults?.kind ?? 'terminal',
     x: defaults?.x ?? 0,
@@ -69,6 +81,15 @@ export function makeNode(defaults?: {
     cwd: defaults?.cwd ?? '',
     shell: defaults?.shell ?? '',
   };
+  if (defaults?.note) node.note = { text: defaults.note.text };
+  if (defaults?.file) node.file = { path: defaults.file.path, ...(defaults.file.line != null ? { line: defaults.file.line } : {}) };
+  return node;
+}
+
+export function defaultSizeFor(kind: NodeKind): { w: number; h: number } {
+  if (kind === 'note') return { w: DEFAULT_NOTE_W, h: DEFAULT_NOTE_H };
+  if (kind === 'file') return { w: DEFAULT_FILE_W, h: DEFAULT_FILE_H };
+  return { w: DEFAULT_NODE_W, h: DEFAULT_NODE_H };
 }
 
 export function defaultView(): CanvasView {

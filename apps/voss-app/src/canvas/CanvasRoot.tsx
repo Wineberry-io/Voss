@@ -7,7 +7,9 @@ import { budgetByPaneId } from '../pane/budgetRegistry';
 import { procByPaneId } from '../pane/procRegistry';
 import { isKnownAgentCli } from '../pane/agentDetect';
 import { destroyPaneSession, reapOrphanPaneSessions } from '../pane/paneSessionRegistry';
+import FileNode from './FileNode';
 import Minimap from './Minimap';
+import NoteNode from './NoteNode';
 import TerminalChip from './TerminalChip';
 import { LOD_ZOOM, isTypingKey } from './lod';
 import { MINIMAP_MIN_NODES } from './minimapLayout';
@@ -19,9 +21,9 @@ import { animateView, prefersReducedMotion } from './camera';
 import { boundsOf, centerOn, fitToBounds, nodesIntersecting, panToReveal, rectFromPoints, screenToWorld, zoomAt, type Rect } from './geometry';
 import { snapRect, type Guide } from './snap';
 import {
-  DEFAULT_NODE_H,
-  DEFAULT_NODE_W,
+  NODE_GAP,
   createCanvasState,
+  defaultSizeFor,
   findNode,
   makeNode,
   orderedNodes,
@@ -80,6 +82,9 @@ export type CanvasController = {
   /** Enter placement: a ghost follows the cursor, click places, Esc cancels. */
   placeNode: (kind: NodeKind) => void;
   cancelPlacement: () => void;
+  /** Focus the file node at `path` (updating its line) or open one next to the focused node. */
+  openFile: (path: string, line?: number) => void;
+  updateNote: (id: string, text: string) => void;
   setView: (view: CanvasView) => void;
   snapshot: () => CanvasState;
 };
@@ -334,13 +339,44 @@ export default function CanvasRoot(props: {
     },
     placeNode: (kind) => {
       const from = findNode(store, store.focusedId);
-      const w = from?.w ?? DEFAULT_NODE_W;
-      const h = from?.h ?? DEFAULT_NODE_H;
+      const size = kind === 'terminal' && from?.kind === 'terminal' ? { w: from.w, h: from.h } : defaultSizeFor(kind);
       const vp = viewport();
       const centre = screenToWorld(store.view, vp.w / 2, vp.h / 2);
-      setPlacement({ kind, x: Math.round(centre.x - w / 2), y: Math.round(centre.y - h / 2), w, h });
+      setPlacement({ kind, x: Math.round(centre.x - size.w / 2), y: Math.round(centre.y - size.h / 2), ...size });
     },
     cancelPlacement: () => setPlacement(null),
+    openFile: (path, line) => {
+      const existing = store.nodes.find((n) => n.kind === 'file' && n.file?.path === path);
+      if (existing) {
+        setStore(produce((s) => {
+          const n = findNode(s, existing.id)!;
+          if (line != null) n.file = { path, line };
+          focusNode(s, existing.id, changed);
+        }));
+        reveal(existing.id);
+        return;
+      }
+      markCustom();
+      const from = findNode(store, store.focusedId);
+      const size = defaultSizeFor('file');
+      const node = makeNode({
+        kind: 'file',
+        file: { path, ...(line != null ? { line } : {}) },
+        x: from ? from.x + from.w + NODE_GAP : 0,
+        y: from ? from.y : 0,
+        ...size,
+        cwd: props.projectCwd,
+      });
+      setStore(produce((s) => void addNode(s, node, changed)));
+      reveal(node.id);
+    },
+    updateNote: (id, text) => {
+      setStore(produce((s) => {
+        const n = findNode(s, id);
+        if (n && n.kind === 'note') n.note = { text };
+      }));
+      changed();
+    },
     setView: commitView,
     snapshot: plain,
   };
@@ -385,7 +421,20 @@ export default function CanvasRoot(props: {
     markCustom();
     setStore(produce((s) => {
       const from = findNode(s, s.focusedId);
-      void addNode(s, makeNode({ kind: p.kind, x: p.x, y: p.y, w: p.w, h: p.h, cwd: props.projectCwd ?? from?.cwd, shell: from?.shell }), changed);
+      void addNode(
+        s,
+        makeNode({
+          kind: p.kind,
+          x: p.x,
+          y: p.y,
+          w: p.w,
+          h: p.h,
+          cwd: props.projectCwd ?? from?.cwd,
+          shell: from?.shell,
+          ...(p.kind === 'note' ? { note: { text: '' } } : {}),
+        }),
+        changed,
+      );
     }));
   };
   const onPlacementKey = (e: KeyboardEvent) => {
@@ -609,7 +658,7 @@ export default function CanvasRoot(props: {
                 focused={node.id === store.focusedId}
                 selected={isSelected(node.id)}
                 dragging={draggingId() === node.id}
-                process={procByPaneId()[node.id]}
+                process={node.kind === 'file' ? node.file?.path : node.kind === 'note' ? 'note' : procByPaneId()[node.id]}
                 prefixActive={props.prefixActive}
                 prefixReserved={props.prefixReserved}
                 isAgent={!!cfg() && isKnownAgentCli(cfg()!.cliBinary)}
@@ -643,6 +692,17 @@ export default function CanvasRoot(props: {
                   })
                 }
               >
+                <Show when={node.kind === 'terminal' || node.kind === 'native'} fallback={
+                  node.kind === 'note' ? (
+                    <NoteNode
+                      text={node.note?.text ?? ''}
+                      focused={node.id === store.focusedId}
+                      onChange={(text) => controller.updateNote(node.id, text)}
+                    />
+                  ) : (
+                    <FileNode path={node.file?.path ?? ''} line={node.file?.line} workspacePath={props.workspacePath ?? props.projectCwd} />
+                  )
+                }>
                 <Show
                   when={!lod()}
                   fallback={
@@ -679,6 +739,7 @@ export default function CanvasRoot(props: {
                       />
                     )}
                   </Show>
+                </Show>
                 </Show>
               </NodeFrame>
             );

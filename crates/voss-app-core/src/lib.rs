@@ -36,8 +36,9 @@ pub use profiles::{
     ProfileError, ProfileFile, CURRENT_PROFILE_VERSION,
 };
 pub use project::{
-    default_cwd, list_recents, open_project, ProjectError, ProjectInfo, RecentsFile,
-    CURRENT_RECENTS_VERSION, RECENTS_CAP,
+    default_cwd, list_recents, open_project, read_project_file, ProjectError, ProjectFile,
+    ProjectFileError, ProjectInfo, RecentsFile, CURRENT_RECENTS_VERSION, MAX_PROJECT_FILE_BYTES,
+    RECENTS_CAP,
 };
 pub use pty::commands::{
     get_fg_process, pty_kill, pty_pause, pty_resize, pty_resume, pty_write, spawn_pty, PtyEvent,

@@ -27,7 +27,7 @@ export type CanvasRestoreResult = {
 };
 
 function cloneNode(n: CanvasNode): CanvasNode {
-  return {
+  const out: CanvasNode = {
     id: n.id,
     kind: n.kind,
     x: n.x,
@@ -39,6 +39,9 @@ function cloneNode(n: CanvasNode): CanvasNode {
     cwd: n.cwd,
     shell: n.shell,
   };
+  if (n.note) out.note = { text: n.note.text };
+  if (n.file) out.file = { path: n.file.path, ...(n.file.line != null ? { line: n.file.line } : {}) };
+  return out;
 }
 
 /** Whitelist copy: runtime fields can never reach disk. */
@@ -169,7 +172,7 @@ export function applyLayoutToCanvas(
     if (s && l) {
       next.push({ ...l, x: s.x, y: s.y, w: s.w, h: s.h, z: s.z });
     } else if (s) {
-      next.push({ ...makeNode({ kind: s.kind, cwd: s.cwd, shell: s.shell, x: s.x, y: s.y, w: s.w, h: s.h }), z: s.z });
+      next.push({ ...makeNode({ kind: s.kind, cwd: s.cwd, shell: s.shell, x: s.x, y: s.y, w: s.w, h: s.h, note: s.note, file: s.file }), z: s.z });
     } else if (l) {
       next.push(l);
     }

@@ -8,14 +8,32 @@
 export interface QuickOpenItem {
   id: string;
   label: string;
-  section: 'Layouts' | 'Recent Projects';
+  section: 'Layouts' | 'Recent Projects' | 'Files';
   glyph: string;
   secondary?: string;
+}
+
+export interface DirEntryLike {
+  name: string;
+  is_dir: boolean;
+  children?: DirEntryLike[];
+}
+
+/** Workspace-relative file paths from a `list_dir` result, depth first. */
+export function flattenFiles(entries: readonly DirEntryLike[], prefix = ''): string[] {
+  const out: string[] = [];
+  for (const e of entries) {
+    const path = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.is_dir) out.push(...flattenFiles(e.children ?? [], path));
+    else out.push(path);
+  }
+  return out;
 }
 
 export function buildQuickOpenItems(
   layouts: readonly string[],
   recents: readonly string[],
+  files: readonly string[] = [],
 ): QuickOpenItem[] {
   const items: QuickOpenItem[] = [];
   for (const name of layouts) {
@@ -33,6 +51,15 @@ export function buildQuickOpenItems(
       label: name,
       section: 'Recent Projects',
       glyph: 'R',
+      secondary: path,
+    });
+  }
+  for (const path of files) {
+    items.push({
+      id: `file:${path}`,
+      label: path.split('/').pop() || path,
+      section: 'Files',
+      glyph: 'F',
       secondary: path,
     });
   }

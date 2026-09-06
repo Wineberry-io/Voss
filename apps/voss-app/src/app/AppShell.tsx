@@ -127,6 +127,7 @@ export default function AppShell(props: AppShellProps) {
               activityEvents={agents.activityLog()}
               usageEntries={agents.usageEntries()}
               workspacePath={ws.workspacePath() ?? null}
+              onOpenFile={(rel) => ws.gridController()?.openFile(rel)}
             />
             <div style={{ flex: '1', 'min-height': '0', 'min-width': '0', display: 'flex', 'flex-direction': 'column', position: 'relative' }}>
               <WorkspaceTabBar

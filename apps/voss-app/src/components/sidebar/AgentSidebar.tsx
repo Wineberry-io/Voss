@@ -5,6 +5,7 @@ import ActivitySection from './ActivitySection';
 import type { ActivityEvent } from './ActivitySection';
 import UsageSection from './UsageSection';
 import type { UsageEntry } from './UsageSection';
+import FileTree from './FileTree';
 import './sidebar.css';
 
 type AgentEntry = Omit<AgentItemProps, 'onClick' | 'onContextMenu' | 'isActive'>;
@@ -20,6 +21,7 @@ export interface AgentSidebarProps {
   activityEvents: ActivityEvent[];
   usageEntries: UsageEntry[];
   workspacePath: string | null;
+  onOpenFile?: (relPath: string) => void;
 }
 
 const AgentSidebar: Component<AgentSidebarProps> = (props) => {
@@ -145,6 +147,12 @@ const AgentSidebar: Component<AgentSidebarProps> = (props) => {
         <div class="sidebar-section-label">USAGE</div>
         <div class="sidebar-section-body">
           <UsageSection entries={props.usageEntries} />
+        </div>
+
+        {/* FILES section */}
+        <div class="sidebar-section-label">FILES</div>
+        <div class="sidebar-section-body" style={{ flex: '1', 'min-height': '0', overflow: 'auto' }}>
+          <FileTree projectPath={props.workspacePath} onOpenFile={props.onOpenFile} />
         </div>
       </div>
 

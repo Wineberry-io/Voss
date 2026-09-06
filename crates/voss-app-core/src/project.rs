@@ -51,6 +51,88 @@ pub struct RecentsFile {
     pub recents: Vec<String>,
 }
 
+/// Largest file a file node will open.
+pub const MAX_PROJECT_FILE_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectFile {
+    /// Workspace-relative path as requested.
+    pub path: String,
+    pub content: String,
+    pub language: String,
+    pub size: u64,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ProjectFileError {
+    #[error("path is outside the workspace")]
+    OutsideWorkspace,
+    #[error("file not found")]
+    NotFound,
+    #[error("not a file")]
+    NotAFile,
+    #[error("file is larger than the 2 MiB limit")]
+    TooLarge,
+    #[error("file is not valid UTF-8")]
+    NotUtf8,
+    #[error("could not read file")]
+    ReadFailed,
+}
+
+pub fn language_for_path(path: &str) -> &'static str {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("md" | "markdown") => "markdown",
+        Some("ts" | "tsx" | "mts" | "cts") => "typescript",
+        Some("js" | "jsx" | "mjs" | "cjs") => "javascript",
+        Some("py" | "pyi") => "python",
+        Some("rs") => "rust",
+        Some("json" | "jsonc") => "json",
+        Some("yaml" | "yml") => "yaml",
+        Some("toml") => "toml",
+        _ => "plain",
+    }
+}
+
+/// Read a UTF-8 file inside `workspace`. The joined path is canonicalised
+/// (symlinks resolved) and must stay under the canonical workspace root;
+/// files over `max_bytes` are refused before any read.
+pub fn read_project_file(
+    workspace: &Path,
+    rel_path: &str,
+    max_bytes: u64,
+) -> Result<ProjectFile, ProjectFileError> {
+    let root = std::fs::canonicalize(workspace).map_err(|_| ProjectFileError::OutsideWorkspace)?;
+    let candidate = root.join(rel_path);
+    let canonical = std::fs::canonicalize(&candidate).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            ProjectFileError::NotFound
+        } else {
+            ProjectFileError::ReadFailed
+        }
+    })?;
+    if !canonical.starts_with(&root) {
+        return Err(ProjectFileError::OutsideWorkspace);
+    }
+    let meta = std::fs::metadata(&canonical).map_err(|_| ProjectFileError::ReadFailed)?;
+    if !meta.is_file() {
+        return Err(ProjectFileError::NotAFile);
+    }
+    if meta.len() > max_bytes {
+        return Err(ProjectFileError::TooLarge);
+    }
+    let bytes = std::fs::read(&canonical).map_err(|_| ProjectFileError::ReadFailed)?;
+    let content = String::from_utf8(bytes).map_err(|_| ProjectFileError::NotUtf8)?;
+    Ok(ProjectFile {
+        path: rel_path.to_string(),
+        content,
+        language: language_for_path(rel_path).to_string(),
+        size: meta.len(),
+    })
+}
+
 pub fn open_project(path: &Path) -> Result<ProjectInfo, ProjectError> {
     let canonical = std::fs::canonicalize(path).map_err(|e| {
         eprintln!("[voss-app] open_project canonicalize: {e}");
@@ -224,6 +306,55 @@ mod tests {
         let sig = git2::Signature::now("Voss Test", "test@example.com").unwrap();
         repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
             .unwrap();
+    }
+
+    #[test]
+    fn ac_s2_5_read_project_file_rejects_escapes_and_oversize_and_reads_normal_files() {
+        let ws = tempdir().unwrap();
+        std::fs::create_dir_all(ws.path().join("src")).unwrap();
+        std::fs::write(ws.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+
+        let ok = read_project_file(ws.path(), "src/main.rs", MAX_PROJECT_FILE_BYTES).unwrap();
+        assert_eq!(ok.content, "fn main() {}\n");
+        assert_eq!(ok.language, "rust");
+        assert_eq!(ok.path, "src/main.rs");
+        assert_eq!(ok.size, 13);
+
+        let traversal = read_project_file(ws.path(), "../../etc/passwd", MAX_PROJECT_FILE_BYTES);
+        assert!(
+            matches!(
+                traversal,
+                Err(ProjectFileError::OutsideWorkspace) | Err(ProjectFileError::NotFound)
+            ),
+            "{traversal:?}"
+        );
+        let absolute = read_project_file(ws.path(), "/etc/hosts", MAX_PROJECT_FILE_BYTES);
+        assert!(matches!(absolute, Err(ProjectFileError::OutsideWorkspace)), "{absolute:?}");
+
+        let outside = tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), "s").unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside.path().join("secret.txt"), ws.path().join("link.txt")).unwrap();
+            let via_link = read_project_file(ws.path(), "link.txt", MAX_PROJECT_FILE_BYTES);
+            assert!(matches!(via_link, Err(ProjectFileError::OutsideWorkspace)), "{via_link:?}");
+        }
+
+        let big = vec![b'a'; 3 * 1024 * 1024];
+        std::fs::write(ws.path().join("big.txt"), big).unwrap();
+        let too_large = read_project_file(ws.path(), "big.txt", MAX_PROJECT_FILE_BYTES);
+        assert!(matches!(too_large, Err(ProjectFileError::TooLarge)), "{too_large:?}");
+
+        let dir = read_project_file(ws.path(), "src", MAX_PROJECT_FILE_BYTES);
+        assert!(matches!(dir, Err(ProjectFileError::NotAFile)), "{dir:?}");
+    }
+
+    #[test]
+    fn language_detection_by_extension() {
+        assert_eq!(language_for_path("a/b/c.tsx"), "typescript");
+        assert_eq!(language_for_path("Cargo.toml"), "toml");
+        assert_eq!(language_for_path("README"), "plain");
+        assert_eq!(language_for_path("x.YML"), "yaml");
     }
 
     #[test]

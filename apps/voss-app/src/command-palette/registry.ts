@@ -54,6 +54,7 @@ export interface AppContext {
   zoomToFocused?: () => void;
   moveMode?: () => void;
   newTerminalNode?: () => void;
+  newNoteNode?: () => void;
   openQuickPalette: () => void;
   openFullPalette: () => void;
   openProject: () => void;
@@ -241,6 +242,13 @@ export function v0Commands(): CommandDefinition[] {
       category: 'Pane',
       keybinding: 'Cmd+Shift+T',
       handler: (ctx) => ctx.newTerminalNode?.(),
+    },
+    {
+      id: 'canvas.newNote',
+      label: 'New Note',
+      category: 'Pane',
+      keybinding: 'Cmd+Shift+N',
+      handler: (ctx) => ctx.newNoteNode?.(),
     },
 
     // ---- Layout -------------------------------------------------------------
