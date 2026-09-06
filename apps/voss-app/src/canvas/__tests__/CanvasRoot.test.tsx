@@ -22,6 +22,36 @@ import type { SessionFileV1 } from '../../grid/sessionStorage';
 import CanvasRoot, { type CanvasController } from '../CanvasRoot';
 import { NODE_GAP } from '../model';
 import { isCanvasDragInFlight } from '../sync';
+import { getPaneSession, trackPaneSession, __resetPaneSessions, type PaneSession } from '../../pane/paneSessionRegistry';
+
+function fakeSession(paneId: string, lines: string[]): PaneSession {
+  const hostEl = document.createElement('div');
+  const term = {
+    buffer: { active: { length: lines.length, getLine: (y: number) => ({ translateToString: () => lines[y] }) } },
+    dispose: () => {},
+  };
+  const s = {
+    paneId,
+    hostEl,
+    term,
+    fitAddon: {},
+    searchAddon: {},
+    transport: { kill: () => {} },
+    sink: {},
+    owner: null,
+    opened: true,
+    spawned: true,
+    firstInputFired: false,
+    lastOscTitleAt: 0,
+    dot: 'running',
+    lastExitCode: null,
+    lastBudget: null,
+    lastProc: 'top',
+    cfg: {},
+  } as unknown as PaneSession;
+  trackPaneSession(s);
+  return s;
+}
 
 let dispose: (() => void) | undefined;
 function mount(ui: () => unknown) {
@@ -40,6 +70,7 @@ afterEach(() => {
   dispose = undefined;
   document.body.innerHTML = '';
   document.documentElement.classList.remove('reduced-motion');
+  __resetPaneSessions();
   vi.useRealTimers();
 });
 
@@ -136,7 +167,7 @@ describe('CanvasRoot', () => {
     const { el, ctrl } = mountCanvas();
     const id = nodeEls(el)[0].getAttribute('data-pane-id')!;
     expect(h.mounts.get(id)).toBe(1);
-    ctrl().setView({ x: 300, y: -100, zoom: 0.5 });
+    ctrl().setView({ x: 300, y: -100, zoom: 0.7 });
     ctrl().zoomReset();
     ctrl().resizeDirection('right');
     ctrl().resizeDirection('down');
@@ -295,6 +326,56 @@ describe('CanvasRoot', () => {
     const end = ctrl().snapshot().view;
     expect(end.zoom).toBeLessThanOrEqual(1);
     expect(end).not.toEqual(start);
+  });
+
+  it('AC-S2-2: below zoom 0.6 every node is a chip; zooming back restores the same xterm without a respawn', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().splitFocused('H');
+    const ids = ctrl().snapshot().nodes.map((n) => n.id);
+    const sessions = ids.map((id) => fakeSession(id, ['$ top', 'PID USER', '1 root']));
+    expect(ids.map((id) => h.mounts.get(id))).toEqual([1, 1]);
+
+    ctrl().setView({ x: 0, y: 0, zoom: 0.4 });
+    expect(el.querySelector('.canvas-root')?.hasAttribute('data-lod')).toBe(true);
+    expect(el.querySelectorAll('[data-terminal-chip]')).toHaveLength(2);
+    expect(el.querySelectorAll('[data-mock-pane-id]')).toHaveLength(0);
+    const chip = el.querySelector(`[data-terminal-chip="${ids[0]}"]`)!;
+    expect(chip.textContent).toContain('top');
+    expect(chip.textContent).toContain('1 root');
+
+    ctrl().setView({ x: 0, y: 0, zoom: 1 });
+    expect(el.querySelectorAll('[data-terminal-chip]')).toHaveLength(0);
+    expect(el.querySelectorAll('[data-mock-pane-id]')).toHaveLength(2);
+    ids.forEach((id, i) => {
+      expect(getPaneSession(id)).toBe(sessions[i]);
+      expect(getPaneSession(id)!.term).toBe(sessions[i].term);
+    });
+    expect(ids.map((id) => h.mounts.get(id))).toEqual([2, 2]);
+  });
+
+  it('typing into a chip-rendered focused node snaps the camera to it at zoom 1', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().setView({ x: 0, y: 0, zoom: 0.3 });
+    expect(el.querySelector('.canvas-root')?.hasAttribute('data-lod')).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l' }));
+    expect(ctrl().snapshot().view.zoom).toBe(1);
+    expect(el.querySelector('.canvas-root')?.hasAttribute('data-lod')).toBe(false);
+  });
+
+  it('minimap appears from three nodes and a click centres the view', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().splitFocused('H');
+    expect(el.querySelector('[data-minimap]')).toBeNull();
+    ctrl().splitFocused('V');
+    const map = el.querySelector('[data-minimap]') as HTMLElement;
+    expect(map).not.toBeNull();
+    expect(map.querySelectorAll('[data-minimap-node]')).toHaveLength(3);
+    const before = { ...ctrl().snapshot().view };
+    map.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 0, clientY: 0 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 0, clientY: 0 }));
+    const after = ctrl().snapshot().view;
+    expect(after.zoom).toBe(before.zoom);
+    expect(after).not.toEqual(before);
   });
 
   it('pointercancel settles a header drag and clears the in-flight flag', () => {

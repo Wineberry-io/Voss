@@ -7,6 +7,10 @@ import { budgetByPaneId } from '../pane/budgetRegistry';
 import { procByPaneId } from '../pane/procRegistry';
 import { isKnownAgentCli } from '../pane/agentDetect';
 import { destroyPaneSession, reapOrphanPaneSessions } from '../pane/paneSessionRegistry';
+import Minimap from './Minimap';
+import TerminalChip from './TerminalChip';
+import { LOD_ZOOM, isTypingKey } from './lod';
+import { MINIMAP_MIN_NODES } from './minimapLayout';
 import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile } from '../grid/sessionStorage';
 import NodeFrame from './NodeFrame';
@@ -139,6 +143,7 @@ export default function CanvasRoot(props: {
   const [marquee, setMarquee] = createSignal<Rect | null>(null);
   const [placement, setPlacement] = createSignal<{ kind: NodeKind; x: number; y: number; w: number; h: number } | null>(null);
 
+  const lod = () => store.view.zoom < LOD_ZOOM;
   const isSelected = (id: string) => selectedIds().has(id);
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
@@ -392,6 +397,15 @@ export default function CanvasRoot(props: {
     }
   };
 
+  /** Typing into a chip-rendered focused node snaps the camera to it at zoom 1. */
+  const onTypingKey = (e: KeyboardEvent) => {
+    if (props.active?.() === false || !lod() || placement() || !isTypingKey(e)) return;
+    const target = e.target as HTMLElement | null;
+    if (target && target.closest?.('input, textarea, [contenteditable="true"]')) return;
+    const n = findNode(store, store.focusedId);
+    if (n) flyTo(centerOn(n, viewport()));
+  };
+
   // --- pointer: shift-drag marquee on the empty plane ------------------------
   const beginMarquee = (e: PointerEvent) => {
     const origin = rootPoint(e);
@@ -546,6 +560,7 @@ export default function CanvasRoot(props: {
     rootEl.addEventListener('wheel', onWheel, { passive: false });
     rootEl.addEventListener('pointermove', onPlacementMove);
     window.addEventListener('keydown', onPlacementKey, true);
+    window.addEventListener('keydown', onTypingKey);
     props.controllerRef?.(controller);
     if (initResult) props.onLayoutChange?.(initResult.activeLayout);
     changed();
@@ -557,6 +572,7 @@ export default function CanvasRoot(props: {
     cancelCamera = null;
     window.removeEventListener('resize', readViewport);
     window.removeEventListener('keydown', onPlacementKey, true);
+    window.removeEventListener('keydown', onTypingKey);
     rootEl?.removeEventListener('wheel', onWheel);
     rootEl?.removeEventListener('pointermove', onPlacementMove);
     resizeObserver?.disconnect();
@@ -572,6 +588,7 @@ export default function CanvasRoot(props: {
       data-panning={panning() ? '' : undefined}
       data-placing={placement() ? '' : undefined}
       data-move-mode={props.moveMode ? '' : undefined}
+      data-lod={lod() ? '' : undefined}
       data-zoom={store.view.zoom.toFixed(2)}
       onPointerDown={onRootPointerDown}
       onContextMenu={(e) => {
@@ -626,28 +643,42 @@ export default function CanvasRoot(props: {
                   })
                 }
               >
-                <Show when={node.id} keyed>
-                  {(paneId) => (
-                    <PaneComponent
-                      id={paneId}
+                <Show
+                  when={!lod()}
+                  fallback={
+                    <TerminalChip
+                      paneId={node.id}
                       cwd={node.cwd}
                       shell={node.shell}
-                      index={node.index}
-                      embeddedInGrid
-                      restoredScrollback={restoredScrollbackByPaneId()[paneId]}
-                      onFirstInput={() =>
-                        setRestoredScrollbackByPaneId((prev) => {
-                          const next = { ...prev };
-                          delete next[paneId];
-                          return next;
-                        })
-                      }
-                      agentConfig={cfg()}
-                      workspacePath={props.workspacePath}
-                      nativeSessionId={props.nativeSessionByPaneId?.[paneId]?.sessionId}
-                      nativeSidecarId={props.nativeSessionByPaneId?.[paneId]?.sidecarId}
+                      process={procByPaneId()[node.id]}
+                      budget={budget()}
+                      roleColor={cfg() ? mapCliToRoleColor(cfg()!.cliBinary) : undefined}
                     />
-                  )}
+                  }
+                >
+                  <Show when={node.id} keyed>
+                    {(paneId) => (
+                      <PaneComponent
+                        id={paneId}
+                        cwd={node.cwd}
+                        shell={node.shell}
+                        index={node.index}
+                        embeddedInGrid
+                        restoredScrollback={restoredScrollbackByPaneId()[paneId]}
+                        onFirstInput={() =>
+                          setRestoredScrollbackByPaneId((prev) => {
+                            const next = { ...prev };
+                            delete next[paneId];
+                            return next;
+                          })
+                        }
+                        agentConfig={cfg()}
+                        workspacePath={props.workspacePath}
+                        nativeSessionId={props.nativeSessionByPaneId?.[paneId]?.sessionId}
+                        nativeSidecarId={props.nativeSessionByPaneId?.[paneId]?.sidecarId}
+                      />
+                    )}
+                  </Show>
                 </Show>
               </NodeFrame>
             );
@@ -672,6 +703,20 @@ export default function CanvasRoot(props: {
           )}
         </For>
       </div>
+      <Show when={store.nodes.length >= MINIMAP_MIN_NODES}>
+        <Minimap
+          nodes={store.nodes}
+          view={store.view}
+          viewport={viewport()}
+          focusedId={store.focusedId}
+          colorFor={(n) => {
+            const c = props.agentConfigByPaneId?.[n.id];
+            if (c) return `var(${mapCliToRoleColor(c.cliBinary)})`;
+            return n.kind === 'native' ? 'var(--accent-cyan)' : 'var(--fg-3)';
+          }}
+          onPan={commitView}
+        />
+      </Show>
       <Show when={props.moveMode}>
         <div class="canvas-mode-badge" data-mode-badge="move">move · hjkl / wasd · esc</div>
       </Show>

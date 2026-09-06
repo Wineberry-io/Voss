@@ -161,3 +161,81 @@
   pointer-events: none;
   z-index: 20;
 }
+
+.terminal-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  background: var(--bg-1);
+  border-left: 3px solid var(--chip-role);
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 22px;
+  color: var(--fg-1);
+}
+
+.terminal-chip__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-chip__dot--loading { color: var(--fg-3); }
+.terminal-chip__dot--running { color: var(--accent-green); }
+.terminal-chip__dot--exited { color: var(--accent-red); }
+
+.terminal-chip__lines {
+  flex: 1;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--fg-2);
+  overflow: hidden;
+}
+
+.terminal-chip__line {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-chip__budget {
+  font-size: 16px;
+}
+
+.canvas-minimap {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: color-mix(in srgb, var(--bg-2) 88%, transparent);
+  border: 1px solid var(--border-bright);
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 21;
+  touch-action: none;
+}
+
+.canvas-minimap__node {
+  position: absolute;
+  opacity: 0.7;
+}
+
+.canvas-minimap__node--focused {
+  outline: 1px solid var(--focus);
+  opacity: 1;
+}
+
+.canvas-minimap__viewport {
+  position: absolute;
+  border: 1px solid var(--fg-1);
+  box-sizing: border-box;
+  pointer-events: none;
+}
