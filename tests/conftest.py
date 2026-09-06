@@ -61,7 +61,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int):
 
 
 _INDEX_BUILD_TARGETS = {"CodeIndexService._build_loop", "ExternalRecallService._build_loop"}
-_INDEX_BUILD_DRAIN_S = 300.0
+_INDEX_BUILD_JOIN_S = 120.0
 
 
 def _drain_index_builds() -> None:
@@ -72,19 +72,23 @@ def _drain_index_builds() -> None:
     inside torch while Python finalizes makes the process abort with
     'terminate called without an active exception' after pytest has already
     reported success. Waiting for the in-flight builds keeps the exit clean.
+    Each thread gets its own bounded join so a leaked fake clock cannot
+    shorten the wait.
     """
+    import sys
     import threading
-    import time
 
-    deadline = time.monotonic() + _INDEX_BUILD_DRAIN_S
-    for t in threading.enumerate():
-        target = getattr(t, "_target", None)
-        if getattr(target, "__qualname__", None) not in _INDEX_BUILD_TARGETS:
-            continue
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        t.join(timeout=remaining)
+    builders = [
+        t
+        for t in threading.enumerate()
+        if getattr(getattr(t, "_target", None), "__qualname__", None) in _INDEX_BUILD_TARGETS
+        or t.name.endswith("(_build_loop)")
+    ]
+    for t in builders:
+        t.join(timeout=_INDEX_BUILD_JOIN_S)
+    if os.environ.get("VOSS_EXIT_DIAG"):
+        still = [t.name for t in builders if t.is_alive()]
+        sys.stderr.write(f"[exit-diag] drained {len(builders)} index builders; still alive: {still}\n")
 
 
 def _report_exit_state() -> None:
