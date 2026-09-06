@@ -19,10 +19,14 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
+use crate::canvas::CanvasState;
 use crate::grid::GridState;
 
 /// On-disk session schema version. Bump when the schema shape changes.
-pub const CURRENT_SESSION_VERSION: u32 = 1;
+pub const CURRENT_SESSION_VERSION: u32 = 2;
+/// Oldest version still accepted on load. v1 carries a split tree that the
+/// webview migrates to canvas nodes and re-saves as v2.
+pub const MIN_SESSION_VERSION: u32 = 1;
 
 /// Persisted session file. Wraps `GridState` with per-pane scrollback,
 /// the active preset, and the project-less flag (D-12).
@@ -31,7 +35,10 @@ pub const CURRENT_SESSION_VERSION: u32 = 1;
 pub struct SessionFile {
     pub version: u32,
     pub active_preset: Option<String>,
-    pub grid: GridState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<GridState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas: Option<CanvasState>,
     pub panes: Vec<SessionPane>,
     pub project_less_accepted: bool,
 }
@@ -46,7 +53,7 @@ pub struct SessionPane {
 }
 
 impl SessionFile {
-    /// Build a v1 SessionFile.
+    /// Build a SessionFile from a legacy split tree (tests + migration).
     pub fn new(
         grid: GridState,
         active_preset: Option<String>,
@@ -56,7 +63,25 @@ impl SessionFile {
         Self {
             version: CURRENT_SESSION_VERSION,
             active_preset,
-            grid,
+            grid: Some(grid),
+            canvas: None,
+            panes,
+            project_less_accepted,
+        }
+    }
+
+    /// Build a v2 SessionFile from canvas nodes.
+    pub fn from_canvas(
+        canvas: CanvasState,
+        active_preset: Option<String>,
+        panes: Vec<SessionPane>,
+        project_less_accepted: bool,
+    ) -> Self {
+        Self {
+            version: CURRENT_SESSION_VERSION,
+            active_preset,
+            grid: None,
+            canvas: Some(canvas),
             panes,
             project_less_accepted,
         }
@@ -287,8 +312,13 @@ fn parse_session(raw: &str) -> Result<SessionFile, &'static str> {
     let value: serde_json::Value = serde_json::from_str(raw).map_err(|_| "invalid JSON")?;
     let version = value.get("version").and_then(|v| v.as_u64());
     match version {
-        Some(v) if v == CURRENT_SESSION_VERSION as u64 => {
-            serde_json::from_value(value).map_err(|_| "invalid session file")
+        Some(v) if v >= MIN_SESSION_VERSION as u64 && v <= CURRENT_SESSION_VERSION as u64 => {
+            let file: SessionFile =
+                serde_json::from_value(value).map_err(|_| "invalid session file")?;
+            if file.grid.is_none() && file.canvas.is_none() {
+                return Err("invalid session file");
+            }
+            Ok(file)
         }
         Some(_) => Err("unsupported version"),
         None => Err("missing version"),
@@ -370,10 +400,34 @@ mod tests {
     // --- Task 1: schema + serde -------------------------------------------
 
     #[test]
-    fn session_file_new_sets_version_1() {
+    fn session_file_new_sets_current_version() {
         let s = sample_session();
-        assert_eq!(s.version, 1);
-        assert_eq!(CURRENT_SESSION_VERSION, 1);
+        assert_eq!(s.version, 2);
+        assert_eq!(CURRENT_SESSION_VERSION, 2);
+    }
+
+    #[test]
+    fn v1_tree_session_still_parses() {
+        let raw = r#"{"version":1,"activePreset":null,"grid":{"root":{"kind":"pane","id":"a","cwd":"/r","shell":"zsh","index":1},"focusedId":"a"},"panes":[],"projectLessAccepted":false}"#;
+        let s = parse_session(raw).expect("v1 parses");
+        assert!(s.grid.is_some());
+        assert!(s.canvas.is_none());
+    }
+
+    #[test]
+    fn v2_canvas_session_round_trips_without_grid() {
+        let s = SessionFile::from_canvas(CanvasState::default(), None, vec![], false);
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!json.contains("\"grid\""), "{json}");
+        assert!(json.contains("\"canvas\""), "{json}");
+        let back = parse_session(&json).unwrap();
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn session_without_grid_or_canvas_is_invalid() {
+        let raw = r#"{"version":2,"activePreset":null,"panes":[],"projectLessAccepted":false}"#;
+        assert!(parse_session(raw).is_err());
     }
 
     #[test]
@@ -388,7 +442,7 @@ mod tests {
     fn json_contains_expected_camel_case_keys() {
         let s = sample_session();
         let json = serde_json::to_string(&s).unwrap();
-        assert!(json.contains("\"version\":1"), "version: {json}");
+        assert!(json.contains("\"version\":2"), "version: {json}");
         assert!(json.contains("\"focusedId\""), "focusedId: {json}");
         assert!(json.contains("\"activePreset\""), "activePreset: {json}");
         assert!(

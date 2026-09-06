@@ -131,6 +131,11 @@ export async function installTauriMock(
           return null;
         case 'get_grid':
           return null;
+        case 'sync_canvas':
+          if (c.trackSyncs) syncs.push(JSON.parse(JSON.stringify(args?.newState ?? null)));
+          return null;
+        case 'get_canvas':
+          return null;
         case 'get_active_agents':
         case 'list_profiles':
         case 'list_workspaces':

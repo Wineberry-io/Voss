@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { GridStore } from './tree';
 import type { LayoutPreset } from './layoutPresets';
+import type { CanvasNode, CanvasView } from '../canvas/model';
 
 /**
  * Frontend bridge for the A4-03 Rust layout persistence commands. These
@@ -19,6 +20,9 @@ export type LayoutFile = {
   version: 1;
   activePreset: LayoutPreset | null;
   grid: GridStore;
+  /** S1 canvas geometry; absent on layouts saved before the canvas. */
+  nodes?: CanvasNode[];
+  view?: CanvasView;
 };
 
 // --- Exact UI-SPEC copy ----------------------------------------------------

@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { subscribeStructuralChange } from '../grid/sync';
-import { buildSessionFile } from '../grid/sessionCommands';
+import { buildSessionFile } from '../canvas/session';
 import { saveSession } from '../grid/sessionStorage';
 import { getScrollbackSnapshot } from '../pane/scrollbackRegistry';
-import type { GridController } from '../grid/GridRoot';
+import type { CanvasController } from '../canvas/CanvasRoot';
 import type { ActiveLayout } from '../grid/layoutPresets';
 import type { WorkspacesIndex } from './workspaceStorage';
 import { saveProjectLessSession } from './workspaceStorage';
@@ -20,7 +20,7 @@ import { saveProjectLessSession } from './workspaceStorage';
 
 export type WorkspaceSessionContext = {
   workspaceId: string;
-  getController: () => GridController | undefined;
+  getController: () => CanvasController | undefined;
   getActiveLayout: () => ActiveLayout;
   getProjectLessAccepted: () => boolean;
   /** null = project-less session target for this workspace id. */
@@ -36,10 +36,8 @@ async function saveWorkspaceSession(
   const controller = ctx.getController();
   if (!controller) return;
 
-  const snap = controller.snapshot();
   const session = buildSessionFile(
-    snap.root,
-    snap.focusedId,
+    controller.snapshot(),
     ctx.getActiveLayout(),
     scrollbackByPaneId,
     ctx.getProjectLessAccepted(),

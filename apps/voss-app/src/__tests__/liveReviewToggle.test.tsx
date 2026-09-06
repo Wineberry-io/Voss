@@ -37,7 +37,7 @@ import {
 } from '../org/model/bridge';
 import CardDrawer from '../org/cockpit/CardDrawer';
 import type { AgentConfig } from '../pane/pty-ipc';
-import type { GridController } from '../grid/GridRoot';
+import type { GridController } from '../canvas/CanvasRoot';
 
 let dispose: (() => void) | undefined;
 function mount(ui: () => unknown): HTMLElement {
@@ -228,7 +228,7 @@ describe('VCKP-08 — spawn wiring mints a cardId and carries it as sessionId (B
       splitFocused: vi.fn(() => {
         focusedId = 'pane-new'; // split succeeds -> focus moves to the new pane
       }),
-      snapshot: vi.fn(() => ({ root: {} as never, focusedId })),
+      snapshot: vi.fn(() => ({ nodes: [], view: { x: 0, y: 0, zoom: 1 }, focusedId })),
     };
     const configByPane: Record<string, AgentConfig> = {};
 
@@ -258,7 +258,7 @@ describe('VCKP-08 — spawn wiring mints a cardId and carries it as sessionId (B
   it('GRD-05 guard: a rejected split mints NO cardId and writes NO config', () => {
     const ctrl = {
       splitFocused: vi.fn(), // no-op: focusedId unchanged (min-size rejection)
-      snapshot: vi.fn(() => ({ root: {} as never, focusedId: 'pane-stuck' })),
+      snapshot: vi.fn(() => ({ nodes: [], view: { x: 0, y: 0, zoom: 1 }, focusedId: 'pane-stuck' })),
     };
     const configByPane: Record<string, AgentConfig> = {};
 
