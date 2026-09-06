@@ -34,10 +34,15 @@ export function subscribeStructuralChange(
   };
 }
 
+/** Fire every structural-change listener (session autosave hooks). */
+export function notifyStructuralChange(): void {
+  for (const listener of structuralListeners) listener();
+}
+
 /** Structural change → sync now (split/fork/close/focus/equalize). */
 export function markStructuralChange(state: GridStore): void {
   void syncGridToRust(state);
-  for (const listener of structuralListeners) listener();
+  notifyStructuralChange();
 }
 
 // Drag coalescer: pointer-move stores the latest state but never syncs;

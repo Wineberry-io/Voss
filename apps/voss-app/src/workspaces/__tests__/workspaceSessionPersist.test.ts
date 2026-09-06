@@ -26,7 +26,7 @@ vi.mock('../../grid/sessionStorage', () => ({
   saveSession: h.saveSession,
 }));
 
-vi.mock('../../grid/sessionCommands', () => ({
+vi.mock('../../canvas/session', () => ({
   buildSessionFile: h.buildSessionFile,
 }));
 

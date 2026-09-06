@@ -5,7 +5,7 @@ import {
 } from './tree';
 import type { ActiveLayout, LayoutPreset } from './layoutPresets';
 import type { LayoutFile } from './layoutStorage';
-import type { SessionFile, SessionPane } from './sessionStorage';
+import type { SessionFileV1, SessionPane } from './sessionStorage';
 
 /**
  * A6-02 Task 2 — pure session snapshot/restore helpers.
@@ -32,7 +32,7 @@ export type SessionRestoreResult = {
 };
 
 /**
- * Build a `SessionFile` from the current grid state.
+ * Build a `SessionFileV1` from the current grid state.
  *
  * Whitelist-copies the tree so runtime fields (PTY session ids, process
  * names, env mutations) cannot leak into the on-disk shape (T-A6-03).
@@ -44,7 +44,7 @@ export function buildSessionFile(
   activeLayout: ActiveLayout,
   scrollbackByPaneId: Map<string, string[]>,
   projectLessAccepted: boolean,
-): SessionFile {
+): SessionFileV1 {
   const leaves = collectLeaves(root);
   const panes: SessionPane[] = leaves.map((leaf) => {
     const lines = scrollbackByPaneId.get(leaf.id) ?? null;
@@ -70,7 +70,7 @@ export function buildSessionFile(
  * because no live user panes exist at launch time. Indices are
  * recomputed from the tree shape.
  */
-export function applySessionFile(session: SessionFile): SessionRestoreResult {
+export function applySessionFile(session: SessionFileV1): SessionRestoreResult {
   const root = cloneCanonical(session.grid.root);
   recomputeIndices(root);
 
@@ -92,17 +92,17 @@ export function applySessionFile(session: SessionFile): SessionRestoreResult {
 }
 
 /**
- * Convert a LayoutFile to a SessionFile for the D-10 restore priority
+ * Convert a LayoutFile to a SessionFileV1 for the D-10 restore priority
  * chain (session → default layout → fresh). Default layouts have no
  * scrollback, so panes get `null`.
  */
 export function layoutToSession(
   layout: LayoutFile,
   projectLessAccepted: boolean,
-): SessionFile {
+): SessionFileV1 {
   return {
     version: 1,
-    activePreset: layout.activePreset as SessionFile['activePreset'],
+    activePreset: layout.activePreset as SessionFileV1['activePreset'],
     grid: layout.grid,
     panes: collectLeaves(layout.grid.root).map((l) => ({
       id: l.id,
@@ -135,7 +135,7 @@ function cloneCanonical(n: TreeNode): TreeNode {
 }
 
 /** Resolve focus: direct id hit in leaves, or fallback to first leaf. */
-function resolveFocus(session: SessionFile): string {
+function resolveFocus(session: SessionFileV1): string {
   const leaves = collectLeaves(session.grid.root);
   const savedId = session.grid.focusedId;
   if (leaves.some((l) => l.id === savedId)) return savedId;

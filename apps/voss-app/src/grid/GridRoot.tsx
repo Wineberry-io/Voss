@@ -25,7 +25,7 @@ import {
 import { applyLoadedLayout } from './layoutCommands';
 import { applySessionFile } from './sessionCommands';
 import type { LayoutFile } from './layoutStorage';
-import type { SessionFile } from './sessionStorage';
+import type { SessionFileV1 } from './sessionStorage';
 import SplitNodeView, {
   type CloseUI,
   type NativeSessionRecord,
@@ -106,7 +106,7 @@ export type GridController = {
   /** Apply a loaded LayoutFile to the live store — never destroys panes (A4-04). */
   applyLoadedLayout: (file: LayoutFile) => void;
   /** Apply a restored session to the live store (A6 runtime apply). */
-  applySession: (session: SessionFile) => void;
+  applySession: (session: SessionFileV1) => void;
   splitFocused: (orientation: 'H' | 'V') => void;
   closeFocused: () => void;
   equalizePanes: () => void;
@@ -129,7 +129,7 @@ export default function GridRoot(props: {
   controllerRef?: (ctrl: GridController) => void;
   projectCwd?: string;
   /** A6: pre-resolved session to initialize from — avoids throwaway default pane. */
-  initialSession?: SessionFile;
+  initialSession?: SessionFileV1;
   /** A7: App owns registry key routing when this is true. */
   externalKeymap?: boolean;
   /** A7: tmux prefix indicator active on focused pane. */
@@ -274,7 +274,7 @@ export default function GridRoot(props: {
    * from project-less to project mode). Uses layout remap since live panes
    * already exist. Scrollback from the session is set for newly matched panes.
    */
-  const applySessionToStore = (session: SessionFile) => {
+  const applySessionToStore = (session: SessionFileV1) => {
     const layoutFile: LayoutFile = {
       version: 1,
       activePreset: session.activePreset,

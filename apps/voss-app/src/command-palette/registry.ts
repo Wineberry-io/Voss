@@ -49,6 +49,9 @@ export interface AppContext {
   focusIndex: (n: number) => void;
   focusDirection: (dir: 'left' | 'right' | 'up' | 'down') => void;
   resizeDirection: (dir: 'left' | 'right' | 'up' | 'down') => void;
+  zoomReset?: () => void;
+  zoomFit?: () => void;
+  zoomToFocused?: () => void;
   openQuickPalette: () => void;
   openFullPalette: () => void;
   openProject: () => void;
@@ -202,6 +205,28 @@ export function v0Commands(): CommandDefinition[] {
       keybinding: `Cmd+Alt+Shift+Arrow${d}`,
       handler: (ctx: AppContext) => ctx.resizeDirection(dir(d)),
     })),
+
+    // ---- Canvas -------------------------------------------------------------
+    {
+      id: 'canvas.zoomReset',
+      label: 'Reset Zoom',
+      category: 'Layout',
+      keybinding: 'Cmd+0',
+      handler: (ctx) => ctx.zoomReset?.(),
+    },
+    {
+      id: 'canvas.zoomFit',
+      label: 'Zoom to Fit',
+      category: 'Layout',
+      keybinding: 'Cmd+Shift+0',
+      handler: (ctx) => ctx.zoomFit?.(),
+    },
+    {
+      id: 'canvas.zoomToFocused',
+      label: 'Zoom to Focused Pane',
+      category: 'Layout',
+      handler: (ctx) => ctx.zoomToFocused?.(),
+    },
 
     // ---- Layout -------------------------------------------------------------
     {

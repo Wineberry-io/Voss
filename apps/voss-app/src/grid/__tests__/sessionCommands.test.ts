@@ -9,7 +9,7 @@ import {
   type TreeNode,
 } from '../tree';
 import { buildSessionFile, applySessionFile } from '../sessionCommands';
-import type { SessionFile } from '../sessionStorage';
+import type { SessionFileV1 } from '../sessionStorage';
 
 /**
  * A6-02 Task 2 — pure session snapshot/restore.
@@ -38,10 +38,10 @@ function makeSessionFile(
   focusedId: string,
   panes: { id: string; scrollback: string[] | null }[],
   opts?: { activePreset?: string | null; projectLessAccepted?: boolean },
-): SessionFile {
+): SessionFileV1 {
   return {
     version: 1,
-    activePreset: (opts?.activePreset as SessionFile['activePreset']) ?? null,
+    activePreset: (opts?.activePreset as SessionFileV1['activePreset']) ?? null,
     grid: { root, focusedId },
     panes,
     projectLessAccepted: opts?.projectLessAccepted ?? false,

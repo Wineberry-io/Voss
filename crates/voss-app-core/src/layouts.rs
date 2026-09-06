@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::canvas::{CanvasNode, CanvasView};
 use crate::grid::GridState;
 
 /// On-disk integer version. Bump when the schema shape changes.
@@ -36,6 +37,12 @@ pub struct LayoutFile {
     /// `LayoutPreset` after load (LAY-01..05 own the closed cycle).
     pub active_preset: Option<String>,
     pub grid: GridState,
+    /// S1 canvas geometry. Absent on layouts saved before the canvas; the
+    /// webview then derives node positions from `grid`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodes: Option<Vec<CanvasNode>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<CanvasView>,
 }
 
 impl LayoutFile {
@@ -45,6 +52,8 @@ impl LayoutFile {
             version: CURRENT_LAYOUT_VERSION,
             active_preset,
             grid,
+            nodes: None,
+            view: None,
         }
     }
 }

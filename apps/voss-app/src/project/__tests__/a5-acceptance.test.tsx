@@ -22,7 +22,7 @@ vi.mock('@tauri-apps/api/window', () => ({
   }),
 }));
 
-vi.mock('../../grid/GridRoot', () => ({
+vi.mock('../../canvas/CanvasRoot', () => ({
   default: (props: {
     controllerRef?: (ctrl: {
       applyPreset: () => void;
