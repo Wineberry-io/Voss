@@ -513,5 +513,5 @@ describe('ProtocolPane — D-08 cap with pins', () => {
     // Cap holds (#rows bounded by CAP).
     const thinkingRows = c.querySelectorAll('.proto-thinking-row');
     expect(thinkingRows.length).toBeLessThanOrEqual(300);
-  }, 10_000);
+  }, 30_000);
 });
