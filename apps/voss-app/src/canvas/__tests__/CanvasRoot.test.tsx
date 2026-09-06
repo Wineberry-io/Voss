@@ -33,11 +33,13 @@ function mount(ui: () => unknown) {
 beforeEach(() => {
   h.invoke.mockClear();
   h.mounts.clear();
+  document.documentElement.classList.add('reduced-motion');
 });
 afterEach(() => {
   dispose?.();
   dispose = undefined;
   document.body.innerHTML = '';
+  document.documentElement.classList.remove('reduced-motion');
   vi.useRealTimers();
 });
 
@@ -241,6 +243,58 @@ describe('CanvasRoot', () => {
     const after = ctrl().snapshot().nodes[0];
     expect(after).toMatchObject({ x: before.x + 20, y: before.y + 30, w: before.w - 20, h: before.h - 30 });
     expect(el.querySelectorAll('[data-resize-handle]')).toHaveLength(8);
+  });
+
+  it('placement mode: a ghost follows the pointer, click places a node there, Esc cancels', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().placeNode('terminal');
+    expect(el.querySelector('[data-placement-ghost="terminal"]')).not.toBeNull();
+    const root = el.querySelector('.canvas-root') as HTMLElement;
+    root.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 900, clientY: 700 }));
+    const ghost = el.querySelector('[data-placement-ghost]') as HTMLElement;
+    const g = rectOf(ghost);
+    expect(g.x).toBe(Math.round(900 - g.w / 2));
+    expect(g.y).toBe(Math.round(700 - g.h / 2));
+    root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 900, clientY: 700 }));
+    expect(el.querySelector('[data-placement-ghost]')).toBeNull();
+    const nodes = ctrl().snapshot().nodes;
+    expect(nodes).toHaveLength(2);
+    expect(nodes[1]).toMatchObject({ x: g.x, y: g.y, kind: 'terminal' });
+    expect(ctrl().snapshot().focusedId).toBe(nodes[1].id);
+
+    ctrl().placeNode('terminal');
+    expect(root.hasAttribute('data-placing')).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(root.hasAttribute('data-placing')).toBe(false);
+    expect(ctrl().snapshot().nodes).toHaveLength(2);
+  });
+
+  it('AC-S2-7: focusDirection pans to an off-screen node instantly under reduced motion', () => {
+    const { ctrl } = mountCanvas();
+    ctrl().splitFocused('H');
+    ctrl().focusIndex(1);
+    const before = ctrl().snapshot();
+    const far = before.nodes[1];
+    ctrl().setView({ x: 0, y: 0, zoom: 1 });
+    ctrl().focusDirection('right');
+    const after = ctrl().snapshot();
+    expect(after.focusedId).toBe(far.id);
+    expect(after.view.x).toBeLessThan(0);
+    expect(after.view.x + (far.x + far.w)).toBeLessThanOrEqual(window.innerWidth);
+  });
+
+  it('camera moves tween over at most 200 ms when motion is allowed', () => {
+    document.documentElement.classList.remove('reduced-motion');
+    vi.useFakeTimers();
+    const { ctrl } = mountCanvas();
+    ctrl().setView({ x: 0, y: 0, zoom: 1 });
+    ctrl().zoomFit();
+    const start = ctrl().snapshot().view;
+    expect(start).toEqual({ x: 0, y: 0, zoom: 1 });
+    vi.advanceTimersByTime(250);
+    const end = ctrl().snapshot().view;
+    expect(end.zoom).toBeLessThanOrEqual(1);
+    expect(end).not.toEqual(start);
   });
 
   it('pointercancel settles a header drag and clears the in-flight flag', () => {

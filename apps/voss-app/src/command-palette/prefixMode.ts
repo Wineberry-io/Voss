@@ -17,6 +17,10 @@ const PREFIX_MAP: Record<string, string> = {
   o: 'pane.focusNext',
   x: 'pane.close',
   c: 'pane.splitRight',     // tmux c = new pane (maps to split right in L1)
+  m: 'canvas.moveMode',
+  z: 'canvas.zoomFit',
+  '0': 'canvas.zoomReset',
+  f: 'canvas.zoomToFocused',
 };
 
 export type PrefixResult =

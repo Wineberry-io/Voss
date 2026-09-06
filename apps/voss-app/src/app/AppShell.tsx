@@ -168,6 +168,7 @@ export default function AppShell(props: AppShellProps) {
                             externalKeymap={true}
                             prefixActive={keys.prefixActive()}
                             prefixReserved={keys.keymapProfile() === 'tmux'}
+                            moveMode={keys.moveMode()}
                             agentConfigByPaneId={mounted()!.agentConfigByPaneId()}
                             nativeSessionByPaneId={mounted()!.nativeSessionByPaneId()}
                             workspacePath={mounted()!.project()?.path ?? undefined}

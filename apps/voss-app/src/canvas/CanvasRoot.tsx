@@ -11,18 +11,24 @@ import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile } from '../grid/sessionStorage';
 import NodeFrame from './NodeFrame';
 import { applyArrangement, nextPreset, type ActiveLayout, type Arrangement, type LayoutPreset } from './arrange';
-import { boundsOf, centerOn, fitToBounds, nodesIntersecting, rectFromPoints, screenToWorld, zoomAt, type Rect } from './geometry';
+import { animateView, prefersReducedMotion } from './camera';
+import { boundsOf, centerOn, fitToBounds, nodesIntersecting, panToReveal, rectFromPoints, screenToWorld, zoomAt, type Rect } from './geometry';
 import { snapRect, type Guide } from './snap';
 import {
+  DEFAULT_NODE_H,
+  DEFAULT_NODE_W,
   createCanvasState,
   findNode,
+  makeNode,
   orderedNodes,
   recomputeIndices,
   type CanvasState,
   type CanvasView,
+  type NodeKind,
 } from './model';
 import { applyLayoutToCanvas, applySessionFile, cloneCanvas } from './session';
 import {
+  addNode,
   cycleFocus,
   focusByDirection,
   focusByIndex,
@@ -67,6 +73,9 @@ export type CanvasController = {
   zoomReset: () => void;
   zoomFit: () => void;
   zoomToFocused: () => void;
+  /** Enter placement: a ghost follows the cursor, click places, Esc cancels. */
+  placeNode: (kind: NodeKind) => void;
+  cancelPlacement: () => void;
   setView: (view: CanvasView) => void;
   snapshot: () => CanvasState;
 };
@@ -103,6 +112,7 @@ export default function CanvasRoot(props: {
   externalKeymap?: boolean;
   prefixActive?: boolean;
   prefixReserved?: boolean;
+  moveMode?: boolean;
   active?: () => boolean;
   agentConfigByPaneId?: Record<string, AgentConfig>;
   nativeSessionByPaneId?: Record<string, NativeSessionRecord>;
@@ -127,6 +137,7 @@ export default function CanvasRoot(props: {
   const [selectedIds, setSelectedIds] = createSignal<ReadonlySet<string>>(new Set());
   const [guides, setGuides] = createSignal<Guide[]>([]);
   const [marquee, setMarquee] = createSignal<Rect | null>(null);
+  const [placement, setPlacement] = createSignal<{ kind: NodeKind; x: number; y: number; w: number; h: number } | null>(null);
 
   const isSelected = (id: string) => selectedIds().has(id);
   const toggleSelected = (id: string) =>
@@ -155,10 +166,40 @@ export default function CanvasRoot(props: {
   };
 
   let viewTimer: ReturnType<typeof setTimeout> | undefined;
+  let cancelCamera: (() => void) | null = null;
   const commitView = (view: CanvasView) => {
+    cancelCamera?.();
+    cancelCamera = null;
     setStore(produce((s) => setView(s, view)));
     if (viewTimer != null) clearTimeout(viewTimer);
     viewTimer = setTimeout(changed, VIEW_PERSIST_MS);
+  };
+
+  /** Camera move: ≤ 200 ms tween, instant under reduced motion. */
+  const flyTo = (view: CanvasView) => {
+    cancelCamera?.();
+    if (prefersReducedMotion()) {
+      cancelCamera = null;
+      commitView(view);
+      return;
+    }
+    const from = { ...store.view };
+    cancelCamera = animateView(
+      from,
+      view,
+      (v) => setStore(produce((s) => setView(s, v))),
+      () => {
+        cancelCamera = null;
+        commitView(view);
+      },
+    );
+  };
+
+  const reveal = (id: string) => {
+    const n = findNode(store, id);
+    if (!n) return;
+    const next = panToReveal(store.view, n, viewport());
+    if (next !== store.view) flyTo(next);
   };
 
   /** World box the viewport currently shows; arrangements fill it. */
@@ -264,7 +305,10 @@ export default function CanvasRoot(props: {
     focusNext: () => setStore(produce((s) => cycleFocus(s, 'next', changed))),
     focusPrev: () => setStore(produce((s) => cycleFocus(s, 'prev', changed))),
     focusIndex: (n) => setStore(produce((s) => focusByIndex(s, n, changed))),
-    focusDirection: (dir) => setStore(produce((s) => focusByDirection(s, dir, changed))),
+    focusDirection: (dir) => {
+      setStore(produce((s) => focusByDirection(s, dir, changed)));
+      reveal(store.focusedId);
+    },
     focusPaneById: (paneId) => {
       if (!findNode(store, paneId)) return;
       setStore(produce((s) => focusNode(s, paneId, changed)));
@@ -274,15 +318,24 @@ export default function CanvasRoot(props: {
       markCustom();
       setStore(produce((s) => resizeFocusedByStep(s, dir, changed)));
     },
-    zoomReset: () => commitView({ x: store.view.x, y: store.view.y, zoom: 1 }),
+    zoomReset: () => flyTo({ x: store.view.x, y: store.view.y, zoom: 1 }),
     zoomFit: () => {
       const b = boundsOf(store.nodes);
-      if (b) commitView(fitToBounds(b, viewport()));
+      if (b) flyTo(fitToBounds(b, viewport()));
     },
     zoomToFocused: () => {
       const n = findNode(store, store.focusedId);
-      if (n) commitView(centerOn(n, viewport()));
+      if (n) flyTo(centerOn(n, viewport()));
     },
+    placeNode: (kind) => {
+      const from = findNode(store, store.focusedId);
+      const w = from?.w ?? DEFAULT_NODE_W;
+      const h = from?.h ?? DEFAULT_NODE_H;
+      const vp = viewport();
+      const centre = screenToWorld(store.view, vp.w / 2, vp.h / 2);
+      setPlacement({ kind, x: Math.round(centre.x - w / 2), y: Math.round(centre.y - h / 2), w, h });
+    },
+    cancelPlacement: () => setPlacement(null),
     setView: commitView,
     snapshot: plain,
   };
@@ -312,6 +365,33 @@ export default function CanvasRoot(props: {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
 
+  // --- placement mode ---------------------------------------------------------
+  const onPlacementMove = (e: PointerEvent) => {
+    const p = placement();
+    if (!p) return;
+    const sp = rootPoint(e);
+    const wp = screenToWorld(store.view, sp.x, sp.y);
+    setPlacement({ ...p, x: Math.round(wp.x - p.w / 2), y: Math.round(wp.y - p.h / 2) });
+  };
+  const confirmPlacement = () => {
+    const p = placement();
+    if (!p) return;
+    setPlacement(null);
+    markCustom();
+    setStore(produce((s) => {
+      const from = findNode(s, s.focusedId);
+      void addNode(s, makeNode({ kind: p.kind, x: p.x, y: p.y, w: p.w, h: p.h, cwd: props.projectCwd ?? from?.cwd, shell: from?.shell }), changed);
+    }));
+  };
+  const onPlacementKey = (e: KeyboardEvent) => {
+    if (!placement()) return;
+    if (e.key === 'Escape') {
+      setPlacement(null);
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
+
   // --- pointer: shift-drag marquee on the empty plane ------------------------
   const beginMarquee = (e: PointerEvent) => {
     const origin = rootPoint(e);
@@ -333,6 +413,13 @@ export default function CanvasRoot(props: {
 
   // --- pointer: pan on empty plane ------------------------------------------
   const onRootPointerDown = (e: PointerEvent) => {
+    if (placement()) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.button === 0) confirmPlacement();
+      else setPlacement(null);
+      return;
+    }
     const onBackground = e.target === rootEl || (e.target as HTMLElement).classList?.contains('canvas-plane');
     const forcePan = e.button === 1 || e.button === 2;
     if (!onBackground && !forcePan) return;
@@ -345,6 +432,8 @@ export default function CanvasRoot(props: {
       }
       clearSelection();
     }
+    cancelCamera?.();
+    cancelCamera = null;
     const start = { x: e.clientX, y: e.clientY, vx: store.view.x, vy: store.view.y };
     setPanning(true);
     beginGesture(
@@ -455,6 +544,8 @@ export default function CanvasRoot(props: {
     resizeObserver?.observe(rootEl);
     window.addEventListener('resize', readViewport);
     rootEl.addEventListener('wheel', onWheel, { passive: false });
+    rootEl.addEventListener('pointermove', onPlacementMove);
+    window.addEventListener('keydown', onPlacementKey, true);
     props.controllerRef?.(controller);
     if (initResult) props.onLayoutChange?.(initResult.activeLayout);
     changed();
@@ -462,8 +553,12 @@ export default function CanvasRoot(props: {
   onCleanup(() => {
     endActiveGesture?.();
     resetCanvasDrag();
+    cancelCamera?.();
+    cancelCamera = null;
     window.removeEventListener('resize', readViewport);
+    window.removeEventListener('keydown', onPlacementKey, true);
     rootEl?.removeEventListener('wheel', onWheel);
+    rootEl?.removeEventListener('pointermove', onPlacementMove);
     resizeObserver?.disconnect();
     resizeObserver = null;
     if (viewTimer != null) clearTimeout(viewTimer);
@@ -475,6 +570,8 @@ export default function CanvasRoot(props: {
       ref={rootEl}
       class="canvas-root"
       data-panning={panning() ? '' : undefined}
+      data-placing={placement() ? '' : undefined}
+      data-move-mode={props.moveMode ? '' : undefined}
       data-zoom={store.view.zoom.toFixed(2)}
       onPointerDown={onRootPointerDown}
       onContextMenu={(e) => {
@@ -556,6 +653,15 @@ export default function CanvasRoot(props: {
             );
           }}
         </For>
+        <Show when={placement()}>
+          {(p) => (
+            <div
+              class="canvas-ghost"
+              data-placement-ghost={p().kind}
+              style={{ transform: `translate(${p().x}px, ${p().y}px)`, width: `${p().w}px`, height: `${p().h}px` }}
+            />
+          )}
+        </Show>
         <For each={guides()}>
           {(g) => (
             <div
@@ -566,6 +672,12 @@ export default function CanvasRoot(props: {
           )}
         </For>
       </div>
+      <Show when={props.moveMode}>
+        <div class="canvas-mode-badge" data-mode-badge="move">move · hjkl / wasd · esc</div>
+      </Show>
+      <Show when={placement()}>
+        <div class="canvas-mode-badge" data-mode-badge="place">click to place · esc</div>
+      </Show>
       <Show when={marquee()}>
         {(m) => (
           <div

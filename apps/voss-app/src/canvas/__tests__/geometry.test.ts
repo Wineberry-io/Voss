@@ -9,6 +9,7 @@ import {
   screenToWorld,
   worldToScreen,
   zoomAt,
+  panToReveal,
 } from '../geometry';
 
 describe('transforms', () => {
@@ -69,5 +70,27 @@ describe('bounds and fit', () => {
     expect(hitTest({ x: 0, y: 0, zoom: 1 }, [a, b], 75, 75)?.id).toBe(b.id);
     expect(hitTest({ x: 0, y: 0, zoom: 1 }, [a, b], 10, 10)?.id).toBe(a.id);
     expect(hitTest({ x: 0, y: 0, zoom: 1 }, [a, b], 500, 500)).toBeUndefined();
+  });
+});
+
+describe('panToReveal', () => {
+  const vp = { w: 1000, h: 800 };
+
+  it('returns the same view when the node is already visible', () => {
+    const view = { x: 0, y: 0, zoom: 1 };
+    expect(panToReveal(view, { x: 100, y: 100, w: 300, h: 200 }, vp)).toBe(view);
+  });
+
+  it('pans the minimum distance to bring an off-screen node into the padded viewport', () => {
+    const v = panToReveal({ x: 0, y: 0, zoom: 1 }, { x: 1200, y: 50, w: 300, h: 200 }, vp);
+    expect(v).toEqual({ x: 1000 - 32 - 1500, y: 0, zoom: 1 });
+    const up = panToReveal({ x: 0, y: 0, zoom: 1 }, { x: 50, y: -500, w: 300, h: 200 }, vp);
+    expect(up).toEqual({ x: 0, y: 532, zoom: 1 });
+  });
+
+  it('centres a node larger than the viewport and honours zoom', () => {
+    const v = panToReveal({ x: 0, y: 0, zoom: 0.5 }, { x: 0, y: 0, w: 3000, h: 100 }, vp);
+    expect(v.x).toBe((1000 - 1500) / 2);
+    expect(v.y).toBe(32);
   });
 });

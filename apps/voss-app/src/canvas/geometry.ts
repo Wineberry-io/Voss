@@ -118,3 +118,31 @@ export function rectFromPoints(
 export function nodesIntersecting(nodes: readonly CanvasNode[], rect: Rect): CanvasNode[] {
   return nodes.filter((n) => intersects(n, rect));
 }
+
+/**
+ * Smallest pan that shows `node` inside `viewport` with `padding` screen px
+ * at the current zoom; a node larger than the viewport is centred instead.
+ * Returns `view` unchanged when the node is already visible.
+ */
+export function panToReveal(
+  view: CanvasView,
+  node: Rect,
+  viewport: Size,
+  padding = 32,
+): CanvasView {
+  const z = view.zoom;
+  const left = node.x * z + view.x;
+  const top = node.y * z + view.y;
+  const w = node.w * z;
+  const h = node.h * z;
+  let dx = 0;
+  let dy = 0;
+  if (w + padding * 2 > viewport.w) dx = (viewport.w - w) / 2 - left;
+  else if (left < padding) dx = padding - left;
+  else if (left + w > viewport.w - padding) dx = viewport.w - padding - (left + w);
+  if (h + padding * 2 > viewport.h) dy = (viewport.h - h) / 2 - top;
+  else if (top < padding) dy = padding - top;
+  else if (top + h > viewport.h - padding) dy = viewport.h - padding - (top + h);
+  if (dx === 0 && dy === 0) return view;
+  return { x: view.x + dx, y: view.y + dy, zoom: z };
+}

@@ -9,6 +9,7 @@ import {
   type KeymapUpdatePayload,
 } from '../command-palette/keymapStorage';
 import { setAsAppMenu } from '../command-palette/nativeMenu';
+import { moveModeDirection } from '../command-palette/moveMode';
 import { createPrefixMode } from '../command-palette/prefixMode';
 import { buildQuickOpenItems } from '../command-palette/quickOpen';
 import {
@@ -32,6 +33,7 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
   const [keymapProfile, setKeymapProfile] = createSignal<KeymapProfile>('vscode');
   const [keymapOverrides, setKeymapOverrides] = createSignal<KeyBindingOverrides>({});
   const [prefixActive, setPrefixActive] = createSignal(false);
+  const [moveMode, setMoveMode] = createSignal(false);
   const [recentCommandIds] = createSignal<Set<string>>(new Set());
   let keymapUnlisten: (() => void) | undefined;
 
@@ -107,6 +109,8 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
     zoomReset: () => ctrl()?.zoomReset(),
     zoomFit: () => ctrl()?.zoomFit(),
     zoomToFocused: () => ctrl()?.zoomToFocused(),
+    moveMode: () => setMoveMode(true),
+    newTerminalNode: () => ctrl()?.placeNode('terminal'),
     openQuickPalette: () => openPalette('quick'),
     openFullPalette: () => openPalette('full'),
     openProject: () => void ws.handleOpenFolder(),
@@ -179,6 +183,17 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
       if (e.metaKey) consume(e);
       return;
     }
+    if (moveMode()) {
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        setMoveMode(false);
+      } else {
+        const dir = moveModeDirection(e.key);
+        if (dir) ctrl()?.focusDirection(dir);
+        else setMoveMode(false);
+        consume(e);
+        return;
+      }
+    }
     const workspaceAction = parseWorkspaceShortcut(e);
     if (workspaceAction) {
       ws.handleWorkspaceShortcut(workspaceAction);
@@ -244,6 +259,7 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
     window.removeEventListener('keydown', onAppKey, true);
     keymapUnlisten?.();
     prefixMode.cancel();
+    setMoveMode(false);
   };
 
   return {
@@ -251,6 +267,7 @@ export function createKeymapHost(ws: WorkspaceHost, view: ViewRouter) {
     setPaletteMode,
     keymapProfile,
     prefixActive,
+    moveMode,
     recentCommandIds,
     registry,
     openPalette,

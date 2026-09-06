@@ -132,3 +132,32 @@
   background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
   z-index: 1001;
 }
+
+.canvas-root[data-placing] {
+  cursor: crosshair;
+}
+
+.canvas-ghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  border: 1px dashed var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+  box-sizing: border-box;
+  z-index: 999;
+}
+
+.canvas-mode-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 3px 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--fg-1);
+  background: var(--bg-3);
+  border: 1px solid var(--border-bright);
+  pointer-events: none;
+  z-index: 20;
+}

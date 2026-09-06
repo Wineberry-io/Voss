@@ -44,6 +44,20 @@ describe('prefixMode — profile gate', () => {
   });
 });
 
+describe('prefixMode — canvas keys', () => {
+  it.each([
+    ['m', 'canvas.moveMode'],
+    ['z', 'canvas.zoomFit'],
+    ['0', 'canvas.zoomReset'],
+    ['f', 'canvas.zoomToFocused'],
+  ])('%s dispatches %s', (key, commandId) => {
+    const { prefix, dispatch } = setup();
+    prefix.tryEnter('tmux');
+    expect(prefix.handleKey(key)).toEqual({ action: 'consumed', commandId });
+    expect(dispatch).toHaveBeenCalledWith(commandId);
+  });
+});
+
 describe('prefixMode — mapped keys', () => {
   it('% dispatches pane.splitBelow and clears prefix', () => {
     const { prefix, dispatch } = setup();
@@ -98,8 +112,8 @@ describe('prefixMode — cancel behaviors', () => {
   it('unknown key cancels and returns passthrough', () => {
     const { prefix, dispatch } = setup();
     prefix.tryEnter('tmux');
-    const result = prefix.handleKey('z');
-    expect(result).toEqual({ action: 'passthrough', key: 'z' });
+    const result = prefix.handleKey('q');
+    expect(result).toEqual({ action: 'passthrough', key: 'q' });
     expect(dispatch).not.toHaveBeenCalled();
     expect(prefix.isActive()).toBe(false);
   });

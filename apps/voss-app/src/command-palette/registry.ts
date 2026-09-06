@@ -52,6 +52,8 @@ export interface AppContext {
   zoomReset?: () => void;
   zoomFit?: () => void;
   zoomToFocused?: () => void;
+  moveMode?: () => void;
+  newTerminalNode?: () => void;
   openQuickPalette: () => void;
   openFullPalette: () => void;
   openProject: () => void;
@@ -226,6 +228,19 @@ export function v0Commands(): CommandDefinition[] {
       label: 'Zoom to Focused Pane',
       category: 'Layout',
       handler: (ctx) => ctx.zoomToFocused?.(),
+    },
+    {
+      id: 'canvas.moveMode',
+      label: 'Move Focus (hjkl / WASD)',
+      category: 'Pane',
+      handler: (ctx) => ctx.moveMode?.(),
+    },
+    {
+      id: 'canvas.newTerminal',
+      label: 'New Terminal Node',
+      category: 'Pane',
+      keybinding: 'Cmd+Shift+T',
+      handler: (ctx) => ctx.newTerminalNode?.(),
     },
 
     // ---- Layout -------------------------------------------------------------
