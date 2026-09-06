@@ -11,7 +11,8 @@ import type { LayoutFile } from '../grid/layoutStorage';
 import type { SessionFile } from '../grid/sessionStorage';
 import NodeFrame from './NodeFrame';
 import { applyArrangement, nextPreset, type ActiveLayout, type Arrangement, type LayoutPreset } from './arrange';
-import { boundsOf, centerOn, fitToBounds, screenToWorld, zoomAt } from './geometry';
+import { boundsOf, centerOn, fitToBounds, nodesIntersecting, rectFromPoints, screenToWorld, zoomAt, type Rect } from './geometry';
+import { snapRect, type Guide } from './snap';
 import {
   createCanvasState,
   findNode,
@@ -29,9 +30,11 @@ import {
   placeAdjacent,
   removeNode,
   resizeFocusedByStep,
-  resizeNode,
+  resizeFromHandle,
+  setRect,
   setView,
   type Direction,
+  type ResizeHandle,
 } from './store';
 import { markCanvasChange, markCanvasDragMove, markCanvasDragSettled, resetCanvasDrag } from './sync';
 
@@ -121,6 +124,21 @@ export default function CanvasRoot(props: {
   const [panning, setPanning] = createSignal(false);
   const [draggingId, setDraggingId] = createSignal<string | null>(null);
   const [closeBanner, setCloseBanner] = createSignal<Record<string, string>>({});
+  const [selectedIds, setSelectedIds] = createSignal<ReadonlySet<string>>(new Set());
+  const [guides, setGuides] = createSignal<Guide[]>([]);
+  const [marquee, setMarquee] = createSignal<Rect | null>(null);
+
+  const isSelected = (id: string) => selectedIds().has(id);
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const clearSelection = () => {
+    if (selectedIds().size > 0) setSelectedIds(new Set<string>());
+  };
 
   createEffect(() => props.onFocusChange?.(store.focusedId));
   createEffect(() => props.onLeafCountChange?.(store.nodes.length));
@@ -194,6 +212,12 @@ export default function CanvasRoot(props: {
   const focus = (id: string) => {
     if (store.focusedId === id) return;
     setStore(produce((s) => focusNode(s, id, changed)));
+  };
+
+  const onNodePointerDown = (e: PointerEvent, id: string) => {
+    if (e.shiftKey) toggleSelected(id);
+    else if (!isSelected(id)) clearSelection();
+    focus(id);
   };
 
   const controller: CanvasController = {
@@ -283,6 +307,30 @@ export default function CanvasRoot(props: {
     window.addEventListener('pointercancel', end);
   };
 
+  const rootPoint = (e: { clientX: number; clientY: number }) => {
+    const rect = rootEl.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  // --- pointer: shift-drag marquee on the empty plane ------------------------
+  const beginMarquee = (e: PointerEvent) => {
+    const origin = rootPoint(e);
+    const base = new Set(selectedIds());
+    setMarquee({ x: origin.x, y: origin.y, w: 0, h: 0 });
+    beginGesture(
+      (ev) => {
+        const box = rectFromPoints(origin, rootPoint(ev));
+        setMarquee(box);
+        const tl = screenToWorld(store.view, box.x, box.y);
+        const world = { x: tl.x, y: tl.y, w: box.w / store.view.zoom, h: box.h / store.view.zoom };
+        const next = new Set(base);
+        for (const n of nodesIntersecting(store.nodes, world)) next.add(n.id);
+        setSelectedIds(next);
+      },
+      () => setMarquee(null),
+    );
+  };
+
   // --- pointer: pan on empty plane ------------------------------------------
   const onRootPointerDown = (e: PointerEvent) => {
     const onBackground = e.target === rootEl || (e.target as HTMLElement).classList?.contains('canvas-plane');
@@ -290,6 +338,13 @@ export default function CanvasRoot(props: {
     if (!onBackground && !forcePan) return;
     if (!onBackground && (e.target as HTMLElement).closest?.('[data-resize-handle]')) return;
     e.preventDefault();
+    if (onBackground && e.button === 0) {
+      if (e.shiftKey) {
+        beginMarquee(e);
+        return;
+      }
+      clearSelection();
+    }
     const start = { x: e.clientX, y: e.clientY, vx: store.view.x, vy: store.view.y };
     setPanning(true);
     beginGesture(
@@ -320,29 +375,51 @@ export default function CanvasRoot(props: {
     commitView({ x: store.view.x - e.deltaX, y: store.view.y - e.deltaY, zoom: store.view.zoom });
   };
 
-  // --- pointer: drag a node by its header -----------------------------------
+  // --- pointer: drag a node (or the selection) by its header ----------------
   const beginNodeDrag = (e: PointerEvent, id: string) => {
     if (e.button !== 0) return;
     if ((e.target as HTMLElement).closest?.('button')) return;
     const node = findNode(store, id);
     if (!node) return;
     e.preventDefault();
-    focus(id);
-    const start = { x: e.clientX, y: e.clientY, nx: node.x, ny: node.y };
+    if (e.shiftKey) return;
+    const group = isSelected(id) ? [...selectedIds()] : [id];
+    const origins = new Map(
+      group.flatMap((gid) => {
+        const n = findNode(store, gid);
+        return n ? [[gid, { x: n.x, y: n.y }] as const] : [];
+      }),
+    );
+    const others = store.nodes.filter((n) => !origins.has(n.id)).map((n) => ({ x: n.x, y: n.y, w: n.w, h: n.h }));
+    const start = { x: e.clientX, y: e.clientY };
     setDraggingId(id);
     beginGesture(
       (ev) => {
         const z = store.view.zoom;
+        let dx = (ev.clientX - start.x) / z;
+        let dy = (ev.clientY - start.y) / z;
+        const origin = origins.get(id)!;
+        if (ev.altKey) {
+          setGuides([]);
+        } else {
+          const snapped = snapRect({ x: origin.x + dx, y: origin.y + dy, w: node.w, h: node.h }, others);
+          dx = snapped.x - origin.x;
+          dy = snapped.y - origin.y;
+          setGuides(snapped.guides);
+        }
         setStore(produce((s) => {
-          const n = findNode(s, id);
-          if (!n) return;
-          n.x = Math.round(start.nx + (ev.clientX - start.x) / z);
-          n.y = Math.round(start.ny + (ev.clientY - start.y) / z);
+          for (const [gid, o] of origins) {
+            const n = findNode(s, gid);
+            if (!n) continue;
+            n.x = Math.round(o.x + dx);
+            n.y = Math.round(o.y + dy);
+          }
         }));
         markCanvasDragMove();
       },
       () => {
         setDraggingId(null);
+        setGuides([]);
         markCustom();
         setStore(produce((s) => recomputeIndices(s.nodes)));
         markCanvasDragSettled(plain());
@@ -350,19 +427,18 @@ export default function CanvasRoot(props: {
     );
   };
 
-  const beginNodeResize = (e: PointerEvent, id: string) => {
+  const beginNodeResize = (e: PointerEvent, id: string, handle: ResizeHandle) => {
     if (e.button !== 0) return;
     const node = findNode(store, id);
     if (!node) return;
     e.preventDefault();
     focus(id);
-    const start = { x: e.clientX, y: e.clientY, w: node.w, h: node.h };
+    const start = { x: e.clientX, y: e.clientY, rect: { x: node.x, y: node.y, w: node.w, h: node.h } };
     beginGesture(
       (ev) => {
         const z = store.view.zoom;
-        setStore(produce((s) =>
-          resizeNode(s, id, start.w + (ev.clientX - start.x) / z, start.h + (ev.clientY - start.y) / z),
-        ));
+        const next = resizeFromHandle(start.rect, handle, (ev.clientX - start.x) / z, (ev.clientY - start.y) / z);
+        setStore(produce((s) => setRect(s, id, next)));
         markCanvasDragMove();
       },
       () => {
@@ -417,6 +493,7 @@ export default function CanvasRoot(props: {
               <NodeFrame
                 node={node}
                 focused={node.id === store.focusedId}
+                selected={isSelected(node.id)}
                 dragging={draggingId() === node.id}
                 process={procByPaneId()[node.id]}
                 prefixActive={props.prefixActive}
@@ -427,9 +504,9 @@ export default function CanvasRoot(props: {
                 costUsd={budget()?.cost_usd}
                 restoredLineCount={restoredScrollbackByPaneId()[node.id]?.length}
                 closeBanner={closeBanner()[node.id] ?? null}
-                onFocus={() => focus(node.id)}
+                onFocus={(e) => onNodePointerDown(e, node.id)}
                 onHeaderPointerDown={(e) => beginNodeDrag(e, node.id)}
-                onResizePointerDown={(e) => beginNodeResize(e, node.id)}
+                onResizePointerDown={(e, handle) => beginNodeResize(e, node.id, handle)}
                 onFork={() => {
                   focus(node.id);
                   split('right');
@@ -479,7 +556,25 @@ export default function CanvasRoot(props: {
             );
           }}
         </For>
+        <For each={guides()}>
+          {(g) => (
+            <div
+              class={`canvas-guide canvas-guide--${g.axis}`}
+              data-guide={g.axis}
+              style={g.axis === 'x' ? { left: `${g.at}px` } : { top: `${g.at}px` }}
+            />
+          )}
+        </For>
       </div>
+      <Show when={marquee()}>
+        {(m) => (
+          <div
+            class="canvas-marquee"
+            data-marquee=""
+            style={{ left: `${m().x}px`, top: `${m().y}px`, width: `${m().w}px`, height: `${m().h}px` }}
+          />
+        )}
+      </Show>
     </div>
   );
 }

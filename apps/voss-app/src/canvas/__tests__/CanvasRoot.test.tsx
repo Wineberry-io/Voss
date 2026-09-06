@@ -185,6 +185,64 @@ describe('CanvasRoot', () => {
     expect(ctrl().snapshot().view.zoom).toBe(1);
   });
 
+  it('AC-S2-1: dragging B toward A snaps its left edge to A right edge with a guide; ⌥ disables snap', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().splitFocused('H');
+    const [a, b] = ctrl().snapshot().nodes;
+    const header = nodeEls(el)[1].querySelector('.pane-header-bar') as HTMLElement;
+    const target = a.x + a.w + 5;
+    header.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 1000, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 1000 + (target - b.x), clientY: 10 }));
+    expect(ctrl().snapshot().nodes[1].x).toBe(a.x + a.w);
+    expect(el.querySelector('[data-guide="x"]')).not.toBeNull();
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 1000 + (target - b.x), clientY: 10 }));
+    expect(el.querySelector('[data-guide]')).toBeNull();
+    expect(ctrl().snapshot().nodes[1].x).toBe(a.x + a.w);
+
+    header.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 1000, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 1005, clientY: 10, altKey: true }));
+    expect(ctrl().snapshot().nodes[1].x).toBe(a.x + a.w + 5);
+    expect(el.querySelector('[data-guide]')).toBeNull();
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 1005, clientY: 10, altKey: true }));
+  });
+
+  it('shift-drag on the plane draws a marquee that selects; dragging a selected node moves the group', () => {
+    const { el, ctrl } = mountCanvas();
+    ctrl().splitFocused('H');
+    const [a, b] = ctrl().snapshot().nodes;
+    const plane = el.querySelector('.canvas-plane') as HTMLElement;
+    plane.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, shiftKey: true, clientX: 5, clientY: 5 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: a.x + a.w + 40, clientY: 40, shiftKey: true }));
+    expect(el.querySelector('[data-marquee]')).not.toBeNull();
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: a.x + a.w + 40, clientY: 40, shiftKey: true }));
+    expect(el.querySelector('[data-marquee]')).toBeNull();
+    expect(el.querySelectorAll('[data-selected]')).toHaveLength(2);
+
+    const header = nodeEls(el)[0].querySelector('.pane-header-bar') as HTMLElement;
+    header.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 10, clientY: 310, altKey: true }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 10, clientY: 310, altKey: true }));
+    const after = ctrl().snapshot().nodes;
+    expect(after.find((n) => n.id === a.id)!.y).toBe(a.y + 300);
+    expect(after.find((n) => n.id === b.id)!.y).toBe(b.y + 300);
+
+    plane.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 5, clientY: 5 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 5, clientY: 5 }));
+    expect(el.querySelectorAll('[data-selected]')).toHaveLength(0);
+  });
+
+  it('west and north handles move the origin while resizing', () => {
+    const { el, ctrl } = mountCanvas();
+    const before = ctrl().snapshot().nodes[0];
+    const handle = el.querySelector('[data-resize-handle="nw"]') as HTMLElement;
+    handle.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 0, clientY: 0 }));
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 20, clientY: 30 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 20, clientY: 30 }));
+    const after = ctrl().snapshot().nodes[0];
+    expect(after).toMatchObject({ x: before.x + 20, y: before.y + 30, w: before.w - 20, h: before.h - 30 });
+    expect(el.querySelectorAll('[data-resize-handle]')).toHaveLength(8);
+  });
+
   it('pointercancel settles a header drag and clears the in-flight flag', () => {
     const { el, ctrl } = mountCanvas();
     const id = nodeEls(el)[0].getAttribute('data-pane-id')!;

@@ -1,13 +1,15 @@
-import { Show, createSignal, type JSX } from 'solid-js';
+import { For, Show, createSignal, type JSX } from 'solid-js';
 import PaneHeader from '../grid/PaneHeader';
 import RestoreBanner from '../grid/RestoreBanner';
 import NodeMenu from './NodeMenu';
 import NodeCloseBanner from './NodeCloseBanner';
 import type { CanvasNode } from './model';
+import { RESIZE_HANDLES, type ResizeHandle } from './store';
 
 export interface NodeFrameProps {
   node: CanvasNode;
   focused: boolean;
+  selected: boolean;
   dragging: boolean;
   process?: string;
   prefixActive?: boolean;
@@ -18,9 +20,9 @@ export interface NodeFrameProps {
   costUsd?: number;
   restoredLineCount?: number;
   closeBanner: string | null;
-  onFocus: () => void;
+  onFocus: (e: PointerEvent) => void;
   onHeaderPointerDown: (e: PointerEvent) => void;
-  onResizePointerDown: (e: PointerEvent) => void;
+  onResizePointerDown: (e: PointerEvent, handle: ResizeHandle) => void;
   onFork: () => void;
   onSplitRight: () => void;
   onSplitBelow: () => void;
@@ -37,9 +39,11 @@ export default function NodeFrame(props: NodeFrameProps) {
     <div
       data-pane-id={props.node.id}
       data-dragging={props.dragging ? '' : undefined}
+      data-selected={props.selected ? '' : undefined}
       classList={{
         'canvas-node grid-pane-leaf': true,
         'grid-pane-leaf--focused': props.focused,
+        'canvas-node--selected': props.selected,
       }}
       style={{
         transform: `translate(${props.node.x}px, ${props.node.y}px)`,
@@ -47,7 +51,7 @@ export default function NodeFrame(props: NodeFrameProps) {
         height: `${props.node.h}px`,
         'z-index': props.node.z,
       }}
-      onPointerDown={() => props.onFocus()}
+      onPointerDown={(e) => props.onFocus(e)}
     >
       <PaneHeader
         index={props.node.index}
@@ -85,14 +89,18 @@ export default function NodeFrame(props: NodeFrameProps) {
         <RestoreBanner lineCount={props.restoredLineCount!} />
       </Show>
       <div class="canvas-node__body">{props.children}</div>
-      <div
-        class="canvas-node__resize"
-        data-resize-handle=""
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          props.onResizePointerDown(e);
-        }}
-      />
+      <For each={RESIZE_HANDLES}>
+        {(handle) => (
+          <div
+            class={`canvas-node__resize canvas-node__resize--${handle}`}
+            data-resize-handle={handle}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              props.onResizePointerDown(e, handle);
+            }}
+          />
+        )}
+      </For>
     </div>
   );
 }

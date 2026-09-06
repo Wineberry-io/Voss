@@ -20,11 +20,34 @@ import { boundsOf, clampZoom, type Rect } from './geometry';
 
 export type Side = 'right' | 'below';
 export type Direction = 'left' | 'right' | 'up' | 'down';
+export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
+export const RESIZE_HANDLES: readonly ResizeHandle[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 export const RESIZE_STEP = 40;
 
 export function clampSize(w: number, h: number): { w: number; h: number } {
   return { w: Math.max(MIN_NODE_W, Math.round(w)), h: Math.max(MIN_NODE_H, Math.round(h)) };
+}
+
+/**
+ * Rect after dragging `handle` by (dx, dy) world px from `start`. West and
+ * north handles move the origin; the opposite edge stays put and the size
+ * never drops below the terminal floor.
+ */
+export function resizeFromHandle(start: Rect, handle: ResizeHandle, dx: number, dy: number): Rect {
+  let { x, y, w, h } = start;
+  if (handle.includes('e')) w = start.w + dx;
+  if (handle.includes('s')) h = start.h + dy;
+  if (handle.includes('w')) {
+    w = Math.max(MIN_NODE_W, start.w - dx);
+    x = start.x + start.w - w;
+  }
+  if (handle.includes('n')) {
+    h = Math.max(MIN_NODE_H, start.h - dy);
+    y = start.y + start.h - h;
+  }
+  const c = clampSize(w, h);
+  return { x: Math.round(x), y: Math.round(y), w: c.w, h: c.h };
 }
 
 function finish(state: CanvasState, onChange?: () => void): void {
@@ -130,6 +153,21 @@ export function resizeNode(
   const c = clampSize(w, h);
   n.w = c.w;
   n.h = c.h;
+  finish(state, onChange);
+}
+
+export function setRect(
+  state: CanvasState,
+  id: string,
+  rect: Rect,
+  onChange?: () => void,
+): void {
+  const n = findNode(state, id);
+  if (!n) return;
+  n.x = rect.x;
+  n.y = rect.y;
+  n.w = rect.w;
+  n.h = rect.h;
   finish(state, onChange);
 }
 

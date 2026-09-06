@@ -97,3 +97,24 @@ export function hitTest(
   }
   return best;
 }
+
+export function intersects(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Normalise a rect dragged from `a` to `b` (either corner may be the origin). */
+export function rectFromPoints(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): Rect {
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(b.x - a.x),
+    h: Math.abs(b.y - a.y),
+  };
+}
+
+export function nodesIntersecting(nodes: readonly CanvasNode[], rect: Rect): CanvasNode[] {
+  return nodes.filter((n) => intersects(n, rect));
+}

@@ -50,17 +50,49 @@
   position: relative;
 }
 
+.canvas-plane > .canvas-node.canvas-node--selected {
+  outline: 1px dashed var(--accent-blue);
+  outline-offset: -1px;
+}
+
 .canvas-node__resize {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
   z-index: 3;
 }
 
-.canvas-node__resize::after {
+.canvas-node__resize--n,
+.canvas-node__resize--s {
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.canvas-node__resize--n { top: -3px; }
+.canvas-node__resize--s { bottom: -3px; }
+
+.canvas-node__resize--e,
+.canvas-node__resize--w {
+  top: 8px;
+  bottom: 8px;
+  width: 6px;
+  cursor: ew-resize;
+}
+.canvas-node__resize--e { right: -3px; }
+.canvas-node__resize--w { left: -3px; }
+
+.canvas-node__resize--ne,
+.canvas-node__resize--nw,
+.canvas-node__resize--se,
+.canvas-node__resize--sw {
+  width: 14px;
+  height: 14px;
+}
+.canvas-node__resize--ne { top: 0; right: 0; cursor: nesw-resize; }
+.canvas-node__resize--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.canvas-node__resize--nw { top: 0; left: 0; cursor: nwse-resize; }
+.canvas-node__resize--se { bottom: 0; right: 0; cursor: nwse-resize; }
+
+.canvas-node__resize--se::after {
   content: '';
   position: absolute;
   right: 3px;
@@ -71,7 +103,32 @@
   border-bottom: 2px solid var(--fg-3);
 }
 
-.canvas-node:hover .canvas-node__resize::after,
-.canvas-node.grid-pane-leaf--focused .canvas-node__resize::after {
+.canvas-node:hover .canvas-node__resize--se::after,
+.canvas-node.grid-pane-leaf--focused .canvas-node__resize--se::after {
   border-color: var(--fg-2);
+}
+
+.canvas-guide {
+  position: absolute;
+  pointer-events: none;
+  background: var(--accent-blue);
+  z-index: 1000;
+}
+.canvas-guide--x {
+  top: -100000px;
+  width: 1px;
+  height: 200000px;
+}
+.canvas-guide--y {
+  left: -100000px;
+  height: 1px;
+  width: 200000px;
+}
+
+.canvas-marquee {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  z-index: 1001;
 }

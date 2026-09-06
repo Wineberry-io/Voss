@@ -19,6 +19,7 @@ import {
   placeAdjacent,
   removeNode,
   resizeFocusedByStep,
+  resizeFromHandle,
   resizeNode,
   RESIZE_STEP,
 } from '../store';
@@ -137,5 +138,30 @@ describe('focus', () => {
     const n = addNode(s, makeNode({ x: 300, y: 0, w: 100, h: 100 }));
     expect(s.focusedId).toBe(n.id);
     expect(n.index).toBe(2);
+  });
+});
+
+describe('resizeFromHandle', () => {
+  const start = { x: 100, y: 100, w: 400, h: 300 };
+
+  it('east and south grow from the far edge', () => {
+    expect(resizeFromHandle(start, 'e', 50, 999)).toEqual({ x: 100, y: 100, w: 450, h: 300 });
+    expect(resizeFromHandle(start, 's', 999, 20)).toEqual({ x: 100, y: 100, w: 400, h: 320 });
+    expect(resizeFromHandle(start, 'se', 10, 20)).toEqual({ x: 100, y: 100, w: 410, h: 320 });
+  });
+
+  it('west and north move the origin and keep the opposite edge', () => {
+    expect(resizeFromHandle(start, 'w', -30, 0)).toEqual({ x: 70, y: 100, w: 430, h: 300 });
+    expect(resizeFromHandle(start, 'n', 0, 40)).toEqual({ x: 100, y: 140, w: 400, h: 260 });
+    expect(resizeFromHandle(start, 'nw', 10, 10)).toEqual({ x: 110, y: 110, w: 390, h: 290 });
+  });
+
+  it('never drops below the floor; a west drag past the floor pins the right edge', () => {
+    const r = resizeFromHandle(start, 'w', 1000, 0);
+    expect(r.w).toBe(MIN_NODE_W);
+    expect(r.x + r.w).toBe(start.x + start.w);
+    const n = resizeFromHandle(start, 'n', 0, 1000);
+    expect(n.h).toBe(MIN_NODE_H);
+    expect(n.y + n.h).toBe(start.y + start.h);
   });
 });
