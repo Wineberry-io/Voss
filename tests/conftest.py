@@ -56,3 +56,24 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int):
         yield
     finally:
         snapshot_plugin.save_svg_diffs = original_save_svg_diffs
+        _report_exit_state()
+
+
+def _report_exit_state() -> None:
+    if not os.environ.get("VOSS_EXIT_DIAG"):
+        return
+    import sys
+    import threading
+
+    lines = ["[exit-diag] live threads:"]
+    for t in threading.enumerate():
+        target = getattr(t, "_target", None)
+        where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}" if target else "?"
+        lines.append(f"  {t.name} daemon={t.daemon} alive={t.is_alive()} target={where}")
+    native = [m for m in sorted(sys.modules) if m.split(".")[0] in {
+        "torch", "onnxruntime", "grpc", "chromadb", "hnswlib", "sentence_transformers",
+        "tokenizers", "transformers", "posthog", "opentelemetry", "watchdog", "textual", "litellm",
+    } and "." not in m]
+    lines.append(f"[exit-diag] native-ish top-level modules loaded: {native}")
+    sys.stderr.write("\n".join(lines) + "\n")
+    sys.stderr.flush()
