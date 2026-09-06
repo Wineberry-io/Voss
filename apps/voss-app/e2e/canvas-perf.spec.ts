@@ -90,6 +90,29 @@ async function measure(page: import('@playwright/test').Page, zoom: number) {
   );
 }
 
+/** Median rAF interval with no input and no PTY traffic: the display refresh period. */
+async function measureIdle(page: import('@playwright/test').Page) {
+  return page.evaluate(
+    async (ms) =>
+      new Promise<{ period: number; frames: number }>((resolve) => {
+        const deltas: number[] = [];
+        const start = performance.now();
+        let last = start;
+        const tick = () => {
+          const now = performance.now();
+          deltas.push(now - last);
+          last = now;
+          if (now - start >= ms) {
+            const sorted = deltas.slice(1).sort((a, b) => a - b);
+            resolve({ period: Number((sorted[Math.floor(sorted.length / 2)] ?? 0).toFixed(2)), frames: sorted.length });
+          } else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    1500,
+  );
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test('canvas-perf: 12 flooding terminals, pan 5 s at zoom 1 and 0.5', async ({ page }) => {
@@ -98,6 +121,10 @@ test('canvas-perf: 12 flooding terminals, pan 5 s at zoom 1 and 0.5', async ({ p
   await stableRects(page, NODE_COUNT);
   await page.waitForFunction((n) => document.querySelectorAll('.pane-body .xterm').length >= n, NODE_COUNT, { timeout: 20_000 });
   await page.waitForFunction((n) => (window as unknown as { __PTY_CHANNELS__: unknown[] }).__PTY_CHANNELS__.length >= n, NODE_COUNT);
+
+  const idle = await measureIdle(page);
+  console.log(`[canvas-perf-idle] ${JSON.stringify(idle)}`);
+  expect(idle.frames).toBeGreaterThan(30);
 
   const atOne = await measure(page, 1);
   console.log(`[canvas-perf] ${JSON.stringify(atOne)}`);
