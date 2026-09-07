@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  agentCommands,
+  appearanceCommands,
   createCommandRegistry,
   v0Commands,
   workspaceCommands,
@@ -220,5 +222,45 @@ describe('workspace command catalog', () => {
     const ctx = mockCtx();
     registry.commands.get('settings.switchProfile')!.handler(ctx);
     expect(ctx.switchProfile).toHaveBeenCalled();
+  });
+});
+
+describe('canvas commands', () => {
+  const registry = createCommandRegistry(v0Commands());
+
+  it.each([
+    ['Cmd+0', 'zoomReset'],
+    ['Cmd+Shift+0', 'zoomFit'],
+    ['Cmd+Shift+T', 'newTerminalNode'],
+    ['Cmd+Shift+N', 'newNoteNode'],
+  ] as const)('%s dispatches ctx.%s', (chord, fn) => {
+    const ctx = { ...mockCtx(), zoomReset: vi.fn(), zoomFit: vi.fn(), zoomToFocused: vi.fn(), moveMode: vi.fn(), newTerminalNode: vi.fn(), newNoteNode: vi.fn() };
+    expect(registry.dispatch(chord, ctx)).toBe(true);
+    expect(ctx[fn]).toHaveBeenCalledTimes(1);
+  });
+
+  it('unbound canvas commands run from the registry by id', () => {
+    const ctx = { ...mockCtx(), zoomToFocused: vi.fn(), moveMode: vi.fn() };
+    registry.commands.get('canvas.zoomToFocused')!.handler(ctx);
+    registry.commands.get('canvas.moveMode')!.handler(ctx);
+    expect(ctx.zoomToFocused).toHaveBeenCalledTimes(1);
+    expect(ctx.moveMode).toHaveBeenCalledTimes(1);
+  });
+
+  it('optional context entries are tolerated by every handler', () => {
+    const all = [...v0Commands(), ...workspaceCommands(), ...agentCommands(), ...appearanceCommands()];
+    const ctx = mockCtx();
+    for (const cmd of all) expect(() => cmd.handler(ctx)).not.toThrow();
+  });
+
+  it('every handler reaches its context callback', () => {
+    const all = [...v0Commands(), ...workspaceCommands(), ...agentCommands(), ...appearanceCommands()];
+    const calls: string[] = [];
+    const ctx = new Proxy({} as AppContext, { get: (_t, key) => () => calls.push(String(key)) });
+    for (const cmd of all) cmd.handler(ctx);
+    expect(calls).toHaveLength(all.length);
+    expect(new Set(calls)).toContain('startAgent');
+    expect(new Set(calls)).toContain('toggleSidebar');
+    expect(new Set(calls)).toContain('setBellBehavior');
   });
 });

@@ -68,6 +68,8 @@ jobs:
       - run: pytest -q -m "$PYTEST_MARKERS" --cov=voss_runtime --cov-report=term-missing --cov-report=xml
         env:
           PYTEST_MARKERS: ${{ github.event_name == 'pull_request' && 'not live and not slow' || 'not live' }}
+          PYTHONFAULTHANDLER: "1"
+          VOSS_EXIT_DIAG: "1"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

@@ -329,21 +329,34 @@ mod tests {
             "{traversal:?}"
         );
         let absolute = read_project_file(ws.path(), "/etc/hosts", MAX_PROJECT_FILE_BYTES);
-        assert!(matches!(absolute, Err(ProjectFileError::OutsideWorkspace)), "{absolute:?}");
+        assert!(
+            matches!(absolute, Err(ProjectFileError::OutsideWorkspace)),
+            "{absolute:?}"
+        );
 
         let outside = tempdir().unwrap();
         std::fs::write(outside.path().join("secret.txt"), "s").unwrap();
         #[cfg(unix)]
         {
-            std::os::unix::fs::symlink(outside.path().join("secret.txt"), ws.path().join("link.txt")).unwrap();
+            std::os::unix::fs::symlink(
+                outside.path().join("secret.txt"),
+                ws.path().join("link.txt"),
+            )
+            .unwrap();
             let via_link = read_project_file(ws.path(), "link.txt", MAX_PROJECT_FILE_BYTES);
-            assert!(matches!(via_link, Err(ProjectFileError::OutsideWorkspace)), "{via_link:?}");
+            assert!(
+                matches!(via_link, Err(ProjectFileError::OutsideWorkspace)),
+                "{via_link:?}"
+            );
         }
 
         let big = vec![b'a'; 3 * 1024 * 1024];
         std::fs::write(ws.path().join("big.txt"), big).unwrap();
         let too_large = read_project_file(ws.path(), "big.txt", MAX_PROJECT_FILE_BYTES);
-        assert!(matches!(too_large, Err(ProjectFileError::TooLarge)), "{too_large:?}");
+        assert!(
+            matches!(too_large, Err(ProjectFileError::TooLarge)),
+            "{too_large:?}"
+        );
 
         let dir = read_project_file(ws.path(), "src", MAX_PROJECT_FILE_BYTES);
         assert!(matches!(dir, Err(ProjectFileError::NotAFile)), "{dir:?}");

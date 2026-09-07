@@ -416,6 +416,111 @@ describe('CanvasRoot', () => {
     expect(syncCalls().at(-1)![1].newState.nodes[1].note).toEqual({ text: '# hi' });
   });
 
+  it('applyLoadedLayout and applySession remap live nodes, reap orphans, and report the layout', () => {
+    const layouts: string[] = [];
+    const { ctrl } = mountCanvas({ onLayoutChange: (l) => layouts.push(l) });
+    const live = ctrl().snapshot().nodes[0].id;
+    fakeSession(live, []);
+    ctrl().applyLoadedLayout({
+      version: 2,
+      activePreset: 'pipeline',
+      nodes: [
+        { ...ctrl().snapshot().nodes[0], id: 'saved-a', x: 0, y: 0, w: 300, h: 200, z: 1, index: 1 },
+        { ...ctrl().snapshot().nodes[0], id: 'saved-b', x: 400, y: 0, w: 300, h: 200, z: 2, index: 2 },
+      ],
+      view: { x: 5, y: 6, zoom: 1 },
+      focusedId: 'saved-b',
+    });
+    let nodes = ctrl().snapshot().nodes;
+    expect(nodes.map((n) => n.id)[0]).toBe(live);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0]).toMatchObject({ x: 0, w: 300 });
+    expect(ctrl().snapshot().view).toEqual({ x: 5, y: 6, zoom: 1 });
+    expect(layouts.at(-1)).toBe('pipeline');
+    expect(getPaneSession(live)).toBeDefined();
+
+    const gone = nodes[1].id;
+    fakeSession(gone, []);
+    ctrl().applySession({
+      version: 2,
+      activePreset: null,
+      canvas: { nodes: [{ ...nodes[0], id: 'only', x: 10, y: 20, w: 400, h: 300, z: 1, index: 1 }], view: { x: 0, y: 0, zoom: 1 }, focusedId: 'only' },
+      panes: [{ id: 'only', scrollback: ['hello'] }],
+      projectLessAccepted: true,
+    });
+    nodes = ctrl().snapshot().nodes;
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0].id).toBe(live);
+    expect(nodes[0]).toMatchObject({ x: 10, y: 20, w: 400, h: 300 });
+    expect(nodes[1].id).toBe(gone);
+    expect(getPaneSession(gone)).toBeDefined();
+    expect(layouts.at(-1)).toBe('custom');
+  });
+
+  it('cycleLayout follows the preset order from the active layout', () => {
+    const layouts: string[] = [];
+    let active = 'custom';
+    const { ctrl } = mountCanvas({ activeLayout: () => active as 'custom', onLayoutChange: (l) => { active = l; layouts.push(l); } });
+    ctrl().splitFocused('H');
+    ctrl().cycleLayout();
+    ctrl().cycleLayout();
+    expect(layouts.filter((l) => l !== 'custom')).toEqual(['fanout', 'pipeline']);
+  });
+
+  it('ctrl-wheel zooms around the cursor; plain wheel on the background pans; right button pans', () => {
+    const { el, ctrl } = mountCanvas();
+    const root = el.querySelector('.canvas-root') as HTMLElement;
+    root.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: 500, clientX: 0, clientY: 0 }));
+    expect(ctrl().snapshot().view.zoom).toBeLessThan(1);
+    ctrl().zoomReset();
+    root.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 30, deltaY: 40 }));
+    expect(ctrl().snapshot().view).toEqual({ x: -30, y: -40, zoom: 1 });
+    const inside = el.querySelector('.canvas-node') as HTMLElement;
+    inside.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 }));
+    expect(ctrl().snapshot().view).toEqual({ x: -30, y: -40, zoom: 1 });
+
+    inside.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 2, clientX: 100, clientY: 100 }));
+    expect(root.hasAttribute('data-panning')).toBe(true);
+    const ctx = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    root.dispatchEvent(ctx);
+    expect(ctx.defaultPrevented).toBe(true);
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 150, clientY: 120 }));
+    window.dispatchEvent(new MouseEvent('pointerup', { clientX: 150, clientY: 120 }));
+    expect(root.hasAttribute('data-panning')).toBe(false);
+    expect(ctrl().snapshot().view).toEqual({ x: 20, y: -20, zoom: 1 });
+  });
+
+  it('agent config colours the chip and the minimap by role; native nodes still host a pane', () => {
+    const { el, ctrl } = mountCanvas({ moveMode: true });
+    ctrl().splitFocused('H');
+    ctrl().splitFocused('H');
+    const ids = ctrl().snapshot().nodes.map((n) => n.id);
+    dispose?.();
+    dispose = undefined;
+    document.body.innerHTML = '';
+    const session = {
+      version: 2 as const,
+      activePreset: null,
+      canvas: {
+        nodes: ids.map((id, i) => ({ id, kind: (i === 2 ? 'native' : 'terminal') as 'native' | 'terminal', x: i * 800, y: 0, w: 720, h: 440, z: i + 1, index: i + 1, cwd: '/p', shell: 'zsh' })),
+        view: { x: 0, y: 0, zoom: 1 },
+        focusedId: ids[0],
+      },
+      panes: [],
+      projectLessAccepted: true,
+    };
+    const cfg = { [ids[0]]: { cliBinary: 'claude', cliArgs: [], sessionId: 's1' }, [ids[1]]: { cliBinary: 'gemini', cliArgs: [], sessionId: 's2' } };
+    const { el: el2, ctrl: ctrl2 } = mountCanvas({ initialSession: session, agentConfigByPaneId: cfg, moveMode: true, nativeSessionByPaneId: { [ids[2]]: { sessionId: 's', sidecarId: 'c' } } });
+    void el;
+    expect(el2.querySelector('[data-mode-badge="move"]')).not.toBeNull();
+    const mapNodes = [...el2.querySelectorAll<HTMLElement>('[data-minimap-node]')];
+    expect(mapNodes.map((n) => n.style.background)).toEqual(['var(--role-planner)', 'var(--role-reviewer)', 'var(--accent-cyan)']);
+    expect(el2.querySelectorAll('[data-mock-pane-id]')).toHaveLength(3);
+    ctrl2().setView({ x: 0, y: 0, zoom: 0.3 });
+    const chip = el2.querySelector(`[data-terminal-chip="${ids[0]}"]`) as HTMLElement;
+    expect(chip.style.getPropertyValue('--chip-role')).toBe('var(--role-planner)');
+  });
+
   it('pointercancel settles a header drag and clears the in-flight flag', () => {
     const { el, ctrl } = mountCanvas();
     const id = nodeEls(el)[0].getAttribute('data-pane-id')!;

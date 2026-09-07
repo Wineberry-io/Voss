@@ -146,7 +146,10 @@ mod tests {
             file: None,
         });
         let json = serde_json::to_string(&s).unwrap();
-        assert!(json.contains("\"file\":{\"path\":\"src/main.rs\",\"line\":12}"), "{json}");
+        assert!(
+            json.contains("\"file\":{\"path\":\"src/main.rs\",\"line\":12}"),
+            "{json}"
+        );
         assert!(json.contains("\"note\":{\"text\":\"# hi\"}"), "{json}");
         let back: CanvasState = serde_json::from_str(&json).unwrap();
         assert_eq!(s, back);

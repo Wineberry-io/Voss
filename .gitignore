@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 coverage.xml
+apps/voss-app/coverage/
 htmlcov/
 dist/
 build/

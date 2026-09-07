@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({
   editors: [] as { doc: string; opts: Record<string, unknown>; destroyed: boolean; revealed: number[]; onChange?: (t: string) => void }[],
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: h.invoke }));
-vi.mock('../editor', async (importOriginal) => {
+vi.mock('../editor', async () => {
   const langs = await import('../editorLanguages');
   return {
     languageForPath: langs.languageForPath,

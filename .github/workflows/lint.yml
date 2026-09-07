@@ -58,6 +58,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -C apps/voss-app exec tsc --noEmit
       - run: pnpm -C sdk/typescript typecheck
+      - run: pnpm -C apps/voss-app test:coverage
+      - uses: codecov/codecov-action@v7
+        if: ${{ !cancelled() }}
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./apps/voss-app/coverage/lcov.info
+          flags: javascript
+          fail_ci_if_error: false
 
   site:
     runs-on: ubuntu-latest

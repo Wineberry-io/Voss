@@ -34,25 +34,78 @@ def _restore_provider_env() -> None:
                 os.environ[key] = value
 
 
+_ABORT_PRONE_NATIVE = frozenset({
+    "torch", "onnxruntime", "sentence_transformers", "tokenizers",
+})
+_EXIT_DIAG_NATIVE = _ABORT_PRONE_NATIVE | frozenset({
+    "grpc", "chromadb", "hnswlib", "transformers", "posthog",
+    "opentelemetry", "watchdog", "textual", "litellm",
+})
+
+
+def _snapshot_sys_modules() -> list[str]:
+    import sys
+
+    try:
+        return list(sys.modules)
+    except RuntimeError:
+        return []
+
+
+def _abort_prone_native_loaded(names: list[str] | None = None) -> bool:
+    loaded = set(names if names is not None else _snapshot_sys_modules())
+    return bool(loaded & _ABORT_PRONE_NATIVE)
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int):
+    snapshot_plugin = None
+    original_save_svg_diffs = None
     try:
-        import pytest_textual_snapshot as snapshot_plugin
+        import pytest_textual_snapshot as snapshot_mod
     except ImportError:
-        yield
-        return
+        snapshot_mod = None
+    else:
+        snapshot_plugin = snapshot_mod
+        original_save_svg_diffs = snapshot_plugin.save_svg_diffs
 
-    original_save_svg_diffs = snapshot_plugin.save_svg_diffs
+        def save_svg_diffs_without_environment(diffs, report_session, num_snapshots_passing):
+            for diff in diffs:
+                diff.environment = {}
+            return original_save_svg_diffs(
+                diffs, report_session, num_snapshots_passing
+            )
 
-    def save_svg_diffs_without_environment(diffs, report_session, num_snapshots_passing):
-        for diff in diffs:
-            diff.environment = {}
-        return original_save_svg_diffs(
-            diffs, report_session, num_snapshots_passing
-        )
-
-    snapshot_plugin.save_svg_diffs = save_svg_diffs_without_environment
+        snapshot_plugin.save_svg_diffs = save_svg_diffs_without_environment
     try:
         yield
     finally:
-        snapshot_plugin.save_svg_diffs = original_save_svg_diffs
+        if snapshot_plugin is not None and original_save_svg_diffs is not None:
+            snapshot_plugin.save_svg_diffs = original_save_svg_diffs
+        _report_exit_state()
+        # Torch/onnxruntime abort in Py_Finalize ("terminate called without an
+        # active exception") once a background index build has loaded them.
+        # Coverage and snapshot plugins have already written; skip C++ teardown.
+        if os.environ.get("VOSS_EXIT_DIAG") or _abort_prone_native_loaded():
+            os._exit(exitstatus)
+
+
+def _report_exit_state() -> None:
+    if not os.environ.get("VOSS_EXIT_DIAG"):
+        return
+    import sys
+    import threading
+
+    lines = ["[exit-diag] live threads:"]
+    for t in threading.enumerate():
+        target = getattr(t, "_target", None)
+        where = f"{getattr(target, '__module__', '?')}.{getattr(target, '__qualname__', '?')}" if target else "?"
+        lines.append(f"  {t.name} daemon={t.daemon} alive={t.is_alive()} target={where}")
+    names = _snapshot_sys_modules()
+    native = [
+        m for m in sorted(names)
+        if m.split(".")[0] in _EXIT_DIAG_NATIVE and "." not in m
+    ]
+    lines.append(f"[exit-diag] native-ish top-level modules loaded: {native}")
+    sys.stderr.write("\n".join(lines) + "\n")
+    sys.stderr.flush()

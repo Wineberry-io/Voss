@@ -124,8 +124,10 @@ def test_snap10_image_attached_anchor(snap_compare, monkeypatch) -> None:
 
 def test_snap11_no_vision_notice_anchor(snap_compare, monkeypatch) -> None:
     from voss.harness.tui.app import VossTUIApp
+    from voss.harness.tui.widgets import LocalBlockNotice
 
     monkeypatch.setattr("voss.harness.tui.widgets.input_bar._probe_clipboard_image", _image)
+    monkeypatch.setattr(LocalBlockNotice, "on_mount", lambda self: None)
 
     async def run_before(pilot) -> None:
         input_bar = pilot.app.query_one("#input")
